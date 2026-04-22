@@ -3,12 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QRスキャナー（zxing-wasm）</title>
+  <title>QRスキャナー（zxing-wasm + 9パス前処理）</title>
   <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@1/dist/iife/reader/index.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: sans-serif; background: #f0f4f8; min-height: 100vh; padding: 16px; }
-    h1 { text-align: center; color: #2d6a4f; font-size: 1.3rem; margin-bottom: 16px; }
+    h1 { text-align: center; color: #2d6a4f; font-size: 1.3rem; margin-bottom: 12px; }
+
+    .tabs {
+      max-width: 480px; margin: 0 auto 12px;
+      display: flex; gap: 4px; background: #e5e7eb;
+      border-radius: 10px; padding: 4px;
+    }
+    .tab {
+      flex: 1; padding: 10px; text-align: center;
+      font-size: 0.9rem; font-weight: 600; color: #555;
+      border-radius: 8px; cursor: pointer;
+      background: transparent; border: none;
+    }
+    .tab.active { background: white; color: #2d6a4f; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+    .mode { display: none; }
+    .mode.active { display: block; }
+
+    /* カメラ */
     #video-container {
       width: 100%; max-width: 480px; margin: 0 auto;
       border-radius: 12px; overflow: hidden; background: #000; position: relative;
@@ -22,19 +40,85 @@
       border: 2px solid #2d6a4f; border-radius: 8px; pointer-events: none;
     }
     #status { text-align: center; font-size: 0.85rem; color: #888; margin-top: 8px; }
+
+    /* 画像アップロード */
+    #image-mode { max-width: 480px; margin: 0 auto; }
+    .upload-area {
+      background: white; border: 2px dashed #cbd5e1; border-radius: 12px;
+      padding: 24px 16px; text-align: center; cursor: pointer;
+    }
+    .upload-area:hover { border-color: #2d6a4f; background: #f8faf9; }
+    .upload-area p { color: #64748b; font-size: 0.9rem; margin-top: 8px; }
+    #file-input { display: none; }
+    #preview-container {
+      margin-top: 12px; background: white; border-radius: 12px;
+      padding: 12px; display: none;
+    }
+    #preview-img {
+      width: 100%; max-height: 320px; object-fit: contain;
+      border-radius: 8px; background: #f1f5f9;
+    }
+    #btn-scan-image {
+      width: 100%; margin-top: 12px; padding: 12px;
+      background: #2d6a4f; color: white; border: none;
+      border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;
+    }
+    #btn-scan-image:disabled { background: #9ca3af; cursor: not-allowed; }
+    #image-status { text-align: center; font-size: 0.85rem; color: #888; margin-top: 8px; }
+
+    /* プログレス */
+    .progress-wrap {
+      margin-top: 8px; background: #e5e7eb; border-radius: 8px;
+      height: 8px; overflow: hidden; display: none;
+    }
+    .progress-bar {
+      height: 100%; background: #2d6a4f; width: 0%;
+      transition: width 0.15s ease;
+    }
+
+    /* 結果 */
     #result-box {
       max-width: 480px; margin: 16px auto 0; background: white;
       border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: none;
     }
-    #result-box h2 { color: #2d6a4f; font-size: 1rem; margin-bottom: 4px; }
-    #result-format { font-size: 0.75rem; color: #888; margin-bottom: 8px; }
-    #result-text { word-break: break-all; font-size: 1rem; color: #333; }
-    #result-text a { color: #1a73e8; }
+    #result-box h2 { color: #2d6a4f; font-size: 1rem; margin-bottom: 8px; }
+    .result-item {
+      padding: 10px; background: #f8faf9; border-radius: 8px; margin-bottom: 8px;
+      border-left: 3px solid #2d6a4f;
+    }
+    .result-item:last-child { margin-bottom: 0; }
+    .result-format { font-size: 0.75rem; color: #64748b; margin-bottom: 4px; }
+    .result-text { word-break: break-all; font-size: 0.95rem; color: #1e293b; font-family: monospace; }
+    .result-text a { color: #1a73e8; font-family: sans-serif; }
+    .result-passes {
+      font-size: 0.7rem; color: #64748b; margin-top: 4px;
+      font-family: monospace;
+    }
+
     .btn-row { display: flex; gap: 8px; margin-top: 12px; }
-    button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
-    #btn-copy { background: #2d6a4f; color: white; }
-    #btn-open { background: #1a73e8; color: white; display: none; }
+    button.action-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
+    #btn-copy-all { background: #2d6a4f; color: white; }
     #btn-rescan { background: #eee; color: #333; }
+
+    /* パス詳細 */
+    details.pass-details {
+      margin-top: 12px; background: #f8faf9; border-radius: 8px; padding: 8px 12px;
+    }
+    details.pass-details summary {
+      cursor: pointer; font-size: 0.85rem; color: #2d6a4f; font-weight: 600;
+    }
+    .pass-table {
+      width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 0.8rem;
+    }
+    .pass-table th, .pass-table td {
+      text-align: left; padding: 4px 6px; border-bottom: 1px solid #e2e8f0;
+    }
+    .pass-table th { color: #64748b; font-weight: 600; }
+    .pass-table tr.hit td { background: #ecfdf5; }
+    .pass-table tr.miss td { color: #94a3b8; }
+    .pass-code { font-family: monospace; font-size: 0.75rem; word-break: break-all; }
+
+    /* 履歴 */
     #history-box { max-width: 480px; margin: 16px auto 0; }
     #history-box h2 { color: #555; font-size: 0.95rem; margin-bottom: 8px; }
     .history-item {
@@ -52,68 +136,324 @@
 </head>
 <body>
   <h1>QR / マイクロQR スキャナー</h1>
-  <div id="video-container">
-    <video id="video" autoplay muted playsinline></video>
-    <canvas id="canvas"></canvas>
-    <div id="overlay"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-mode="camera">📷 カメラ</button>
+    <button class="tab" data-mode="image">🖼 画像から</button>
   </div>
-  <div id="status">初期化中...</div>
+
+  <div id="camera-mode" class="mode active">
+    <div id="video-container">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas"></canvas>
+      <div id="overlay"></div>
+    </div>
+    <div id="status">初期化中...</div>
+  </div>
+
+  <div id="image-mode" class="mode">
+    <label for="file-input" class="upload-area">
+      <div style="font-size: 2rem;">📁</div>
+      <p>タップして画像を選択</p>
+      <p style="font-size: 0.75rem; color: #94a3b8;">JPG / PNG / HEIC 対応・9パス前処理で読み取り</p>
+    </label>
+    <input type="file" id="file-input" accept="image/*">
+
+    <div id="preview-container">
+      <img id="preview-img" alt="プレビュー">
+      <button id="btn-scan-image">QRを読み取る（9パス）</button>
+      <div class="progress-wrap"><div class="progress-bar"></div></div>
+      <div id="image-status"></div>
+    </div>
+  </div>
 
   <div id="result-box">
-    <h2>読み取り結果</h2>
-    <div id="result-format"></div>
-    <div id="result-text"></div>
+    <h2>読み取り結果 <span id="result-count"></span></h2>
+    <div id="result-list"></div>
     <div class="btn-row">
-      <button id="btn-copy" onclick="copyResult()">コピー</button>
-      <button id="btn-open" onclick="openUrl()">URLを開く</button>
-      <button id="btn-rescan" onclick="もう一度スキャン">もう一度スキャン</button>
+      <button id="btn-copy-all" class="action-btn">全てコピー</button>
+      <button id="btn-rescan" class="action-btn">もう一度</button>
     </div>
+    <details class="pass-details" id="pass-details" style="display:none">
+      <summary>前処理パス別の内訳を見る</summary>
+      <table class="pass-table">
+        <thead><tr><th>#</th><th>パス</th><th>検出</th><th>時間</th></tr></thead>
+        <tbody id="pass-table-body"></tbody>
+      </table>
+    </details>
   </div>
 
   <div id="history-box" style="display:none">
     <h2>履歴</h2>
     <div id="history-list"></div>
-    <button id="btn-clear-history" onclick="clearHistory()">履歴を削除</button>
+    <button id="btn-clear-history">履歴を削除</button>
   </div>
 
   <script>
-    let lastResult = '';
+    // ========================================
+    // 9パス前処理の定義
+    // ========================================
+    const BENCH_PASSES = [
+      { name: 'original',       scale: 1, op: 'none' },
+      { name: 'gray',           scale: 1, op: 'gray' },
+      { name: 'gray_scale2x',   scale: 2, op: 'gray' },
+      { name: 'gray_scale4x',   scale: 4, op: 'gray' },
+      { name: 'gray_invert',    scale: 1, op: 'invert' },
+      { name: 'gray_threshold', scale: 1, op: 'threshold' },
+      { name: 'clahe',          scale: 1, op: 'clahe' },
+      { name: 'clahe_scale2x',  scale: 2, op: 'clahe' },
+      { name: 'adapt_thresh',   scale: 1, op: 'adapt' },
+    ];
+
+    // CLAHE（局所コントラスト強調、8x8タイル、clipLimit=40、バイリニア補間）
+    function _applyCLAHE(gray, W, H) {
+      const TILES = 8, clipLimit = 40;
+      const tileW = Math.max(1, Math.ceil(W / TILES));
+      const tileH = Math.max(1, Math.ceil(H / TILES));
+      const tilesX = Math.ceil(W / tileW);
+      const tilesY = Math.ceil(H / tileH);
+
+      const allLuts = new Array(tilesY * tilesX);
+      for (let ty = 0; ty < tilesY; ty++) {
+        for (let tx = 0; tx < tilesX; tx++) {
+          const x0 = tx * tileW, y0 = ty * tileH;
+          const x1 = Math.min(x0 + tileW, W), y1 = Math.min(y0 + tileH, H);
+          const count = (x1 - x0) * (y1 - y0);
+          const hist = new Array(256).fill(0);
+          for (let gy = y0; gy < y1; gy++)
+            for (let gx = x0; gx < x1; gx++)
+              hist[gray[gy * W + gx]]++;
+
+          let excess = 0;
+          for (let j = 0; j < 256; j++) {
+            if (hist[j] > clipLimit) { excess += hist[j] - clipLimit; hist[j] = clipLimit; }
+          }
+          const add = Math.floor(excess / 256), rem = excess % 256;
+          for (let j = 0; j < 256; j++) { hist[j] += add; if (j < rem) hist[j]++; }
+
+          const lut = new Uint8Array(256);
+          let cdf = 0;
+          for (let j = 0; j < 256; j++) {
+            cdf += hist[j];
+            lut[j] = Math.min(255, Math.round(cdf * 255 / count));
+          }
+          allLuts[ty * tilesX + tx] = lut;
+        }
+      }
+
+      const xtx0 = new Uint8Array(W), xtx1 = new Uint8Array(W);
+      const xfx = new Float32Array(W);
+      for (let x = 0; x < W; x++) {
+        const tf = (x + 0.5) / tileW - 0.5;
+        const t0 = Math.max(0, Math.floor(tf));
+        xtx0[x] = t0;
+        xtx1[x] = Math.min(tilesX - 1, t0 + 1);
+        xfx[x] = Math.max(0, Math.min(1, tf - t0));
+      }
+
+      const result = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) {
+        const tfy = (y + 0.5) / tileH - 0.5;
+        const ty0 = Math.max(0, Math.floor(tfy));
+        const ty1 = Math.min(tilesY - 1, ty0 + 1);
+        const fy = Math.max(0, Math.min(1, tfy - ty0));
+        const ify = 1 - fy;
+        const row = y * W;
+        for (let x = 0; x < W; x++) {
+          const g = gray[row + x];
+          const t0x = xtx0[x], t1x = xtx1[x];
+          const fx = xfx[x], ifx = 1 - fx;
+          result[row + x] = Math.round(
+            allLuts[ty0 * tilesX + t0x][g] * ifx * ify +
+            allLuts[ty0 * tilesX + t1x][g] * fx * ify +
+            allLuts[ty1 * tilesX + t0x][g] * ifx * fy +
+            allLuts[ty1 * tilesX + t1x][g] * fx * fy
+          );
+        }
+      }
+      return result;
+    }
+
+    // 適応的閾値（近傍31x31、C=10、積分画像でO(1)）
+    function _applyAdaptThresh(gray, W, H) {
+      const half = 15, C = 10;
+      const iw = W + 1;
+      const integral = new Uint32Array(iw * (H + 1));
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          integral[(y + 1) * iw + (x + 1)] = gray[y * W + x]
+            + integral[y * iw + (x + 1)]
+            + integral[(y + 1) * iw + x]
+            - integral[y * iw + x];
+        }
+      }
+      const result = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) {
+        const y0 = Math.max(0, y - half), y1 = Math.min(H - 1, y + half);
+        const row = y * W;
+        for (let x = 0; x < W; x++) {
+          const x0 = Math.max(0, x - half), x1 = Math.min(W - 1, x + half);
+          const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+          const sum = integral[(y1 + 1) * iw + (x1 + 1)]
+                    - integral[y0 * iw + (x1 + 1)]
+                    - integral[(y1 + 1) * iw + x0]
+                    + integral[y0 * iw + x0];
+          result[row + x] = gray[row + x] >= (sum / area) - C ? 255 : 0;
+        }
+      }
+      return result;
+    }
+
+    // 1パス実行：前処理 → ImageData → zxing-wasm
+    async function runPass(img, pass) {
+      const t0 = performance.now();
+      const W = Math.round(img.naturalWidth * pass.scale);
+      const H = Math.round(img.naturalHeight * pass.scale);
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const cx = c.getContext('2d');
+      cx.drawImage(img, 0, 0, W, H);
+
+      if (pass.op !== 'none') {
+        const id = cx.getImageData(0, 0, W, H);
+        const d = id.data;
+        const n = W * H;
+        const gray = new Uint8Array(n);
+        for (let i = 0; i < n; i++) {
+          gray[i] = Math.round(d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114);
+        }
+        let out;
+        if (pass.op === 'gray')       out = gray;
+        else if (pass.op === 'invert') {
+          out = new Uint8Array(n);
+          for (let i = 0; i < n; i++) out[i] = 255 - gray[i];
+        }
+        else if (pass.op === 'threshold') {
+          out = new Uint8Array(n);
+          for (let i = 0; i < n; i++) out[i] = gray[i] > 128 ? 255 : 0;
+        }
+        else if (pass.op === 'clahe') out = _applyCLAHE(gray, W, H);
+        else if (pass.op === 'adapt') out = _applyAdaptThresh(gray, W, H);
+        else out = gray;
+
+        for (let i = 0; i < n; i++) {
+          d[i*4] = d[i*4+1] = d[i*4+2] = out[i];
+          d[i*4+3] = 255;
+        }
+        cx.putImageData(id, 0, 0);
+      }
+
+      let codes = [];
+      try {
+        const imageData = cx.getImageData(0, 0, W, H);
+        const r = await ZXingWASM.readBarcodesFromImageData(imageData, {
+          formats: ['QRCode', 'MicroQRCode'],
+          tryHarder: true,
+          tryRotate: true,
+          tryInvert: true,
+          tryDownscale: true,
+        });
+        codes = (r || []).filter(x => x.text);
+      } catch (e) { /* 1パス失敗しても続行 */ }
+
+      return {
+        name: pass.name,
+        codes,
+        elapsed: Math.round(performance.now() - t0)
+      };
+    }
+
+    // 9パスをすべて実行（プログレスコールバック対応）
+    async function runAllPasses(img, onProgress) {
+      const results = [];
+      for (let i = 0; i < BENCH_PASSES.length; i++) {
+        const r = await runPass(img, BENCH_PASSES[i]);
+        results.push(r);
+        if (onProgress) onProgress(i + 1, BENCH_PASSES.length, r);
+      }
+      return results;
+    }
+
+    // ========================================
+    // 状態管理
+    // ========================================
+    let currentMode = 'camera';
+    let lastResults = [];
+    let lastPassResults = [];
     let scanning = false;
     let scanTimer = null;
+    let cameraStream = null;
+
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
 
-    document.getElementById('btn-rescan').onclick = rescan;
-
     function isUrl(t) { return /^https?:\/\//i.test(t); }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
 
-    async function init() {
-      document.getElementById('status').textContent = 'ライブラリ読み込み中...';
-      await ZXingWASM.getZXingModule();
+    // タブ切替
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', () => switchMode(btn.dataset.mode));
+    });
+
+    function switchMode(mode) {
+      if (currentMode === mode) return;
+      currentMode = mode;
+      document.querySelectorAll('.tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      document.getElementById('camera-mode').classList.toggle('active', mode === 'camera');
+      document.getElementById('image-mode').classList.toggle('active', mode === 'image');
+
+      document.getElementById('result-box').style.display = 'none';
+      lastResults = [];
+      lastPassResults = [];
+
+      if (mode === 'camera') startCamera(); else stopCamera();
+    }
+
+    // カメラ
+    async function startCamera() {
+      if (scanning) return;
       document.getElementById('status').textContent = 'カメラ起動中...';
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          scanning = true;
-          document.getElementById('status').textContent = 'スキャン中...';
-          scanLoop();
-        };
+        if (!cameraStream) {
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+        }
+        video.srcObject = cameraStream;
+        await video.play();
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        scanning = true;
+        document.getElementById('status').textContent = 'スキャン中...';
+        scanLoop();
       } catch (e) {
         document.getElementById('status').textContent = 'カメラへのアクセスを許可してください。';
       }
     }
 
+    function stopCamera() {
+      scanning = false;
+      clearTimeout(scanTimer);
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      video.srcObject = null;
+      document.getElementById('status').textContent = '停止中';
+    }
+
     async function scanLoop() {
       if (!scanning) return;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const results = await ZXingWASM.readBarcodesFromImageData(imageData, {
           formats: ['QRCode', 'MicroQRCode'],
           tryHarder: true,
@@ -122,11 +462,11 @@
           tryDownscale: true,
         });
         if (results && results.length > 0) {
-          const text = results[0].text;
-          const format = results[0].format;
-          if (text && text !== lastResult) {
-            lastResult = text;
-            onScanSuccess(text, format);
+          const texts = results.map(r => r.text).filter(Boolean);
+          const last = lastResults.map(r => r.text).join('|');
+          const now = texts.join('|');
+          if (now && now !== last) {
+            onScanSuccess(results, []);
             return;
           }
         }
@@ -134,42 +474,179 @@
       scanTimer = setTimeout(scanLoop, 100);
     }
 
-    function onScanSuccess(text, format) {
-      scanning = false;
-      clearTimeout(scanTimer);
-      document.getElementById('status').textContent = '';
-      document.getElementById('result-box').style.display = 'block';
-      document.getElementById('result-format').textContent = '種別: ' + (format || 'QRCode');
-      const el = document.getElementById('result-text');
-      if (isUrl(text)) {
-        el.innerHTML = `<a href="${text}" target="_blank">${text}</a>`;
-        document.getElementById('btn-open').style.display = 'block';
-      } else {
-        el.textContent = text;
-        document.getElementById('btn-open').style.display = 'none';
+    // 画像スキャン（9パス）
+    const fileInput = document.getElementById('file-input');
+    const previewImg = document.getElementById('preview-img');
+    const previewContainer = document.getElementById('preview-container');
+    const btnScanImage = document.getElementById('btn-scan-image');
+    const imageStatus = document.getElementById('image-status');
+    const progressWrap = document.querySelector('.progress-wrap');
+    const progressBar = document.querySelector('.progress-bar');
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        previewImg.src = ev.target.result;
+        previewContainer.style.display = 'block';
+        imageStatus.textContent = '';
+        progressWrap.style.display = 'none';
+        progressBar.style.width = '0%';
+        document.getElementById('result-box').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    btnScanImage.addEventListener('click', scanImageAllPasses);
+
+    async function scanImageAllPasses() {
+      if (!previewImg.src) return;
+      btnScanImage.disabled = true;
+      imageStatus.textContent = '読み取り中 (0/9)...';
+      progressWrap.style.display = 'block';
+      progressBar.style.width = '0%';
+
+      try {
+        await ZXingWASM.getZXingModule();
+      } catch (e) {
+        imageStatus.textContent = 'ライブラリ初期化エラー: ' + e.message;
+        btnScanImage.disabled = false;
+        return;
       }
-      saveHistory(text, format);
+
+      const img = new Image();
+      img.onload = async () => {
+        const t0 = performance.now();
+        const passResults = await runAllPasses(img, (done, total, r) => {
+          imageStatus.textContent = `読み取り中 (${done}/${total}) - ${r.name}: ${r.codes.length}件`;
+          progressBar.style.width = (done / total * 100) + '%';
+        });
+        const elapsed = Math.round(performance.now() - t0);
+
+        // ユニークなQR集約（text + format をキーに）
+        const uniq = new Map();
+        passResults.forEach(pr => {
+          pr.codes.forEach(c => {
+            const key = (c.format || 'QRCode') + '|' + c.text;
+            if (!uniq.has(key)) uniq.set(key, { text: c.text, format: c.format, passes: [] });
+            uniq.get(key).passes.push(pr.name);
+          });
+        });
+        const aggregated = Array.from(uniq.values());
+
+        if (aggregated.length > 0) {
+          imageStatus.textContent = `${aggregated.length}件検出 (全9パス ${elapsed}ms)`;
+          onScanSuccess(aggregated, passResults);
+        } else {
+          imageStatus.textContent = `9パスすべてで検出なし (${elapsed}ms)`;
+          document.getElementById('result-box').style.display = 'block';
+          document.getElementById('result-list').innerHTML =
+            '<div class="result-item" style="border-left-color:#ef4444"><div class="result-text" style="color:#ef4444">検出なし</div></div>';
+          document.getElementById('result-count').textContent = '';
+          lastResults = [];
+          lastPassResults = passResults;
+          renderPassDetails(passResults);
+        }
+        btnScanImage.disabled = false;
+      };
+      img.onerror = () => {
+        imageStatus.textContent = '画像の読み込みに失敗';
+        btnScanImage.disabled = false;
+      };
+      img.src = previewImg.src;
     }
 
-    function copyResult() {
-      navigator.clipboard.writeText(lastResult).then(() => {
-        document.getElementById('btn-copy').textContent = 'コピーしました！';
-        setTimeout(() => { document.getElementById('btn-copy').textContent = 'コピー'; }, 2000);
+    // 結果表示
+    function onScanSuccess(results, passResults) {
+      lastResults = results;
+      lastPassResults = passResults || [];
+      if (currentMode === 'camera') {
+        scanning = false;
+        clearTimeout(scanTimer);
+        document.getElementById('status').textContent = '';
+      }
+      renderResults(results);
+      renderPassDetails(passResults || []);
+      results.forEach(r => saveHistory(r.text, r.format));
+    }
+
+    function renderResults(results) {
+      const box = document.getElementById('result-box');
+      const list = document.getElementById('result-list');
+      const count = document.getElementById('result-count');
+      count.textContent = results.length > 1 ? `(${results.length}件)` : '';
+      list.innerHTML = results.map(r => {
+        const fmt = r.format || 'QRCode';
+        const text = r.text || '';
+        const body = isUrl(text)
+          ? `<a href="${escapeHtml(text)}" target="_blank">${escapeHtml(text)}</a>`
+          : escapeHtml(text);
+        const passInfo = r.passes && r.passes.length
+          ? `<div class="result-passes">検出パス: ${r.passes.map(escapeHtml).join(', ')}</div>`
+          : '';
+        return `
+          <div class="result-item">
+            <div class="result-format">種別: ${escapeHtml(fmt)}</div>
+            <div class="result-text">${body}</div>
+            ${passInfo}
+          </div>
+        `;
+      }).join('');
+      box.style.display = 'block';
+    }
+
+    function renderPassDetails(passResults) {
+      const details = document.getElementById('pass-details');
+      const tbody = document.getElementById('pass-table-body');
+      if (!passResults || !passResults.length) {
+        details.style.display = 'none';
+        return;
+      }
+      details.style.display = 'block';
+      tbody.innerHTML = passResults.map((r, i) => {
+        const hit = r.codes.length > 0;
+        const codeStr = r.codes.map(c => escapeHtml(c.text)).join('<br>') || '—';
+        return `
+          <tr class="${hit ? 'hit' : 'miss'}">
+            <td>${i + 1}</td>
+            <td>${escapeHtml(r.name)}</td>
+            <td class="pass-code">${codeStr}</td>
+            <td>${r.elapsed}ms</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('btn-copy-all').addEventListener('click', () => {
+      const text = lastResults.map(r => r.text).join('\n');
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('btn-copy-all');
+        btn.textContent = 'コピーしました！';
+        setTimeout(() => { btn.textContent = '全てコピー'; }, 2000);
       });
-    }
-    function openUrl() { window.open(lastResult, '_blank'); }
-    function rescan() {
-      lastResult = '';
-      document.getElementById('result-box').style.display = 'none';
-      scanning = true;
-      document.getElementById('status').textContent = 'スキャン中...';
-      scanLoop();
-    }
+    });
 
+    document.getElementById('btn-rescan').addEventListener('click', () => {
+      lastResults = [];
+      lastPassResults = [];
+      document.getElementById('result-box').style.display = 'none';
+      if (currentMode === 'camera') {
+        scanning = true;
+        document.getElementById('status').textContent = 'スキャン中...';
+        scanLoop();
+      } else {
+        imageStatus.textContent = '';
+        progressWrap.style.display = 'none';
+      }
+    });
+
+    // 履歴
     function saveHistory(text, format) {
+      if (!text) return;
       const history = JSON.parse(localStorage.getItem('qr-history') || '[]');
       history.unshift({ text, format: format || 'QRCode', time: new Date().toLocaleString('ja-JP') });
-      if (history.length > 30) history.pop();
+      if (history.length > 30) history.length = 30;
       localStorage.setItem('qr-history', JSON.stringify(history));
       renderHistory();
     }
@@ -181,15 +658,23 @@
       box.style.display = 'block';
       list.innerHTML = history.map(h => `
         <div class="history-item">
-          <div class="time">${h.time}</div>
-          <div class="fmt">${h.format}</div>
-          ${isUrl(h.text) ? `<a href="${h.text}" target="_blank">${h.text}</a>` : h.text}
+          <div class="time">${escapeHtml(h.time)}</div>
+          <div class="fmt">${escapeHtml(h.format)}</div>
+          ${isUrl(h.text) ? `<a href="${escapeHtml(h.text)}" target="_blank">${escapeHtml(h.text)}</a>` : escapeHtml(h.text)}
         </div>`).join('');
     }
-    function clearHistory() {
+    document.getElementById('btn-clear-history').addEventListener('click', () => {
       if (!confirm('履歴を削除しますか？')) return;
       localStorage.removeItem('qr-history');
       renderHistory();
+    });
+
+    // 起動
+    async function init() {
+      document.getElementById('status').textContent = 'ライブラリ読み込み中...';
+      await ZXingWASM.getZXingModule();
+      document.getElementById('status').textContent = 'カメラ起動中...';
+      startCamera();
     }
 
     renderHistory();
