@@ -28,10 +28,13 @@
 
     /* カメラ */
     #video-container {
-      width: 100%; max-width: 480px; margin: 0 auto;
+      width: 100%; max-width: 480px; max-height: 60vh; margin: 0 auto;
       border-radius: 12px; overflow: hidden; background: #000; position: relative;
     }
-    video { width: 100%; display: block; }
+    video {
+      width: 100%; max-height: 60vh;
+      object-fit: contain; display: block;
+    }
     canvas { display: none; }
     #overlay {
       position: absolute; top: 50%; left: 50%;
@@ -161,7 +164,7 @@
 
     <div id="preview-container">
       <img id="preview-img" alt="プレビュー">
-      <button id="btn-scan-image">QRを読み取る（9パス）</button>
+      <button id="btn-scan-image" type="button">QRを読み取る（9パス）</button>
       <div class="progress-wrap"><div class="progress-bar"></div></div>
       <div id="image-status"></div>
     </div>
@@ -171,8 +174,8 @@
     <h2>読み取り結果 <span id="result-count"></span></h2>
     <div id="result-list"></div>
     <div class="btn-row">
-      <button id="btn-copy-all" class="action-btn">全てコピー</button>
-      <button id="btn-rescan" class="action-btn">もう一度</button>
+      <button id="btn-copy-all" type="button" class="action-btn">全てコピー</button>
+      <button id="btn-rescan" type="button" class="action-btn">もう一度</button>
     </div>
     <details class="pass-details" id="pass-details" style="display:none">
       <summary>前処理パス別の内訳を見る</summary>
@@ -186,7 +189,7 @@
   <div id="history-box" style="display:none">
     <h2>履歴</h2>
     <div id="history-list"></div>
-    <button id="btn-clear-history">履歴を削除</button>
+    <button id="btn-clear-history" type="button">履歴を削除</button>
   </div>
 
   <script>
@@ -304,11 +307,26 @@
       return result;
     }
 
+    // iOS Safari の Canvas 上限対策
+    // 最大辺 4000px、総ピクセル 1200万px を超えないようスケールを自動調整
+    const MAX_DIM = 4000;
+    const MAX_PIXELS = 12_000_000;
+
+    function clampScale(naturalW, naturalH, scale) {
+      let W = naturalW * scale;
+      let H = naturalH * scale;
+      const byDim = Math.min(1, MAX_DIM / Math.max(W, H));
+      const byPix = Math.min(1, Math.sqrt(MAX_PIXELS / (W * H)));
+      const factor = Math.min(byDim, byPix);
+      return scale * factor;
+    }
+
     // 1パス実行：前処理 → ImageData → zxing-wasm
     async function runPass(img, pass) {
       const t0 = performance.now();
-      const W = Math.round(img.naturalWidth * pass.scale);
-      const H = Math.round(img.naturalHeight * pass.scale);
+      const effScale = clampScale(img.naturalWidth, img.naturalHeight, pass.scale);
+      const W = Math.max(1, Math.round(img.naturalWidth * effScale));
+      const H = Math.max(1, Math.round(img.naturalHeight * effScale));
       const c = document.createElement('canvas');
       c.width = W; c.height = H;
       const cx = c.getContext('2d');
