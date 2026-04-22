@@ -2,12 +2,14 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>QRスキャナー（zxing-wasm + 9パス前処理）</title>
   <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@1/dist/iife/reader/index.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { touch-action: pan-y; -webkit-text-size-adjust: 100%; }
     body { font-family: sans-serif; background: #f0f4f8; min-height: 100vh; padding: 16px; }
+    button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
     h1 { text-align: center; color: #2d6a4f; font-size: 1.3rem; margin-bottom: 12px; }
 
     .tabs {
@@ -30,6 +32,9 @@
     #video-container {
       width: 100%; max-width: 480px; aspect-ratio: 1 / 1; margin: 0 auto;
       border-radius: 12px; overflow: hidden; background: #000; position: relative;
+      touch-action: none;
+      user-select: none; -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
     video {
       width: 100%; height: 100%;
@@ -49,6 +54,8 @@
       display: none; align-items: center; gap: 8px;
       background: white; border-radius: 10px; padding: 6px 10px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      touch-action: none;
+      user-select: none; -webkit-user-select: none;
     }
     #zoom-controls.ready { display: flex; }
     #zoom-controls button {
@@ -60,6 +67,7 @@
     #zoom-range {
       flex: 1; -webkit-appearance: none; appearance: none;
       height: 4px; background: #cbd5e1; border-radius: 2px; outline: none;
+      touch-action: none;
     }
     #zoom-range::-webkit-slider-thumb {
       -webkit-appearance: none; appearance: none;
