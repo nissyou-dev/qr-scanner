@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QRスキャナー</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    h1 {
+      text-align: center;
+      color: #2d6a4f;
+      font-size: 1.3rem;
+      margin-bottom: 16px;
+    }
+    #reader {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    #result-box {
+      max-width: 480px;
+      margin: 16px auto 0;
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      display: none;
+    }
+    #result-box h2 { color: #2d6a4f; font-size: 1rem; margin-bottom: 8px; }
+    #result-text {
+      word-break: break-all;
+      font-size: 1rem;
+      color: #333;
+    }
+    #result-text a { color: #1a73e8; }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    #btn-copy { background: #2d6a4f; color: white; }
+    #btn-open { background: #1a73e8; color: white; display: none; }
+    #btn-rescan { background: #eee; color: #333; }
+    #history-box {
+      max-width: 480px;
+      margin: 16px auto 0;
+    }
+    #history-box h2 {
+      color: #555;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+    }
+    .history-item {
+      background: white;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      font-size: 0.9rem;
+      word-break: break-all;
+      color: #333;
+    }
+    .history-item .time {
+      font-size: 0.75rem;
+      color: #aaa;
+      margin-bottom: 4px;
+    }
+    #btn-clear-history {
+      width: 100%;
+      padding: 8px;
+      background: #fee2e2;
+      color: #b91c1c;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>QR / マイクロQR スキャナー</h1>
+
+  <div id="reader"></div>
+
+  <div id="result-box">
+    <h2>読み取り結果</h2>
+    <div id="result-text"></div>
+    <div class="btn-row">
+      <button id="btn-copy" onclick="copyResult()">コピー</button>
+      <button id="btn-open" onclick="openUrl()">URLを開く</button>
+      <button id="btn-rescan" onclick="rescan()">もう一度スキャン</button>
+    </div>
+  </div>
+
+  <div id="history-box" style="display:none">
+    <h2>履歴</h2>
+    <div id="history-list"></div>
+    <button id="btn-clear-history" onclick="clearHistory()">履歴を削除</button>
+  </div>
+
+  <script>
+    let lastResult = '';
+    let scanner;
+
+    function isUrl(text) {
+      return /^https?:\/\//i.test(text);
+    }
+
+    function startScanner() {
+      scanner = new Html5Qrcode('reader');
+      scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.MICRO_QR_CODE,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+            Html5QrcodeSupportedFormats.AZTEC,
+          ]
+        },
+        onScanSuccess,
+        () => {}
+      );
+    }
+
+    function onScanSuccess(text) {
+      if (text === lastResult) return;
+      lastResult = text;
+
+      scanner.stop().then(() => {
+        const box = document.getElementById('result-box');
+        const el = document.getElementById('result-text');
+        box.style.display = 'block';
+
+        if (isUrl(text)) {
+          el.innerHTML = `<a href="${text}" target="_blank">${text}</a>`;
+          document.getElementById('btn-open').style.display = 'block';
+        } else {
+          el.textContent = text;
+          document.getElementById('btn-open').style.display = 'none';
+        }
+
+        saveHistory(text);
+      });
+    }
+
+    function copyResult() {
+      navigator.clipboard.writeText(lastResult).then(() => {
+        document.getElementById('btn-copy').textContent = 'コピーしました！';
+        setTimeout(() => {
+          document.getElementById('btn-copy').textContent = 'コピー';
+        }, 2000);
+      });
+    }
+
+    function openUrl() {
+      window.open(lastResult, '_blank');
+    }
+
+    function rescan() {
+      lastResult = '';
+      document.getElementById('result-box').style.display = 'none';
+      startScanner();
+    }
+
+    function saveHistory(text) {
+      const history = JSON.parse(localStorage.getItem('qr-history') || '[]');
+      history.unshift({ text, time: new Date().toLocaleString('ja-JP') });
+      if (history.length > 30) history.pop();
+      localStorage.setItem('qr-history', JSON.stringify(history));
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const history = JSON.parse(localStorage.getItem('qr-history') || '[]');
+      const box = document.getElementById('history-box');
+      const list = document.getElementById('history-list');
+      if (history.length === 0) { box.style.display = 'none'; return; }
+      box.style.display = 'block';
+      list.innerHTML = history.map(h => `
+        <div class="history-item">
+          <div class="time">${h.time}</div>
+          ${isUrl(h.text) ? `<a href="${h.text}" target="_blank">${h.text}</a>` : h.text}
+        </div>
+      `).join('');
+    }
+
+    function clearHistory() {
+      if (!confirm('履歴を削除しますか？')) return;
+      localStorage.removeItem('qr-history');
+      renderHistory();
+    }
+
+    renderHistory();
+    startScanner();
+  </script>
+</body>
+</html>
