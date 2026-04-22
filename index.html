@@ -28,19 +28,47 @@
 
     /* カメラ */
     #video-container {
-      width: 100%; max-width: 480px; max-height: 60vh; margin: 0 auto;
+      width: 100%; max-width: 480px; aspect-ratio: 1 / 1; margin: 0 auto;
       border-radius: 12px; overflow: hidden; background: #000; position: relative;
     }
     video {
-      width: 100%; max-height: 60vh;
-      object-fit: contain; display: block;
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
     }
     canvas { display: none; }
     #overlay {
       position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      width: 200px; height: 200px;
+      width: 70%; height: 70%; max-width: 280px; max-height: 280px;
       border: 2px solid #2d6a4f; border-radius: 8px; pointer-events: none;
+    }
+
+    /* ズーム */
+    #zoom-controls {
+      max-width: 480px; margin: 8px auto 0;
+      display: none; align-items: center; gap: 8px;
+      background: white; border-radius: 10px; padding: 6px 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    #zoom-controls.ready { display: flex; }
+    #zoom-controls button {
+      width: 40px; height: 36px; border: none; border-radius: 8px;
+      background: #e5e7eb; color: #1e293b; font-size: 1.1rem;
+      font-weight: 700; cursor: pointer;
+    }
+    #zoom-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+    #zoom-range {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; background: #cbd5e1; border-radius: 2px; outline: none;
+    }
+    #zoom-range::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #2d6a4f; cursor: pointer;
+    }
+    #zoom-label {
+      font-size: 0.85rem; color: #2d6a4f; font-weight: 600;
+      min-width: 40px; text-align: center;
     }
     #status { text-align: center; font-size: 0.85rem; color: #888; margin-top: 8px; }
 
@@ -150,6 +178,12 @@
       <video id="video" autoplay muted playsinline></video>
       <canvas id="canvas"></canvas>
       <div id="overlay"></div>
+    </div>
+    <div id="zoom-controls">
+      <button id="zoom-out" type="button" aria-label="ズームアウト">−</button>
+      <input id="zoom-range" type="range" min="1" max="1" step="0.1" value="1">
+      <button id="zoom-in" type="button" aria-label="ズームイン">＋</button>
+      <span id="zoom-label">1.0×</span>
     </div>
     <div id="status">初期化中...</div>
   </div>
@@ -448,6 +482,7 @@
         await video.play();
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        setupZoom();
         scanning = true;
         document.getElementById('status').textContent = 'スキャン中...';
         scanLoop();
@@ -464,13 +499,60 @@
         cameraStream = null;
       }
       video.srcObject = null;
+      document.getElementById('zoom-controls').classList.remove('ready');
       document.getElementById('status').textContent = '停止中';
+    }
+
+    // ズーム（iOS Safari 16+ / Android Chrome 対応）
+    function setupZoom() {
+      const controls = document.getElementById('zoom-controls');
+      const range = document.getElementById('zoom-range');
+      const label = document.getElementById('zoom-label');
+      const btnIn = document.getElementById('zoom-in');
+      const btnOut = document.getElementById('zoom-out');
+      controls.classList.remove('ready');
+
+      if (!cameraStream) return;
+      const track = cameraStream.getVideoTracks()[0];
+      if (!track || !track.getCapabilities) return;
+      const caps = track.getCapabilities();
+      if (!caps.zoom) return;
+
+      const min = caps.zoom.min ?? 1;
+      const max = caps.zoom.max ?? 1;
+      const step = caps.zoom.step || 0.1;
+      if (max <= min) return;
+
+      range.min = min; range.max = max; range.step = step;
+      const settings = track.getSettings();
+      const current = settings.zoom ?? min;
+      range.value = current;
+      label.textContent = (+current).toFixed(1) + '×';
+      controls.classList.add('ready');
+
+      const apply = async (v) => {
+        const clamped = Math.max(min, Math.min(max, +v));
+        try {
+          await track.applyConstraints({ advanced: [{ zoom: clamped }] });
+          range.value = clamped;
+          label.textContent = clamped.toFixed(1) + '×';
+        } catch (e) {}
+      };
+      range.oninput = () => apply(range.value);
+      btnIn.onclick = () => apply(+range.value + step * 5);
+      btnOut.onclick = () => apply(+range.value - step * 5);
     }
 
     async function scanLoop() {
       if (!scanning) return;
       try {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // 画面表示は object-fit: cover で正方形にクロップされているので、
+        // スキャン対象も中央正方形にクロップして読取り対象を揃える
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const side = Math.min(vw, vh);
+        const sx = (vw - side) / 2, sy = (vh - side) / 2;
+        canvas.width = side; canvas.height = side;
+        ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const results = await ZXingWASM.readBarcodesFromImageData(imageData, {
           formats: ['QRCode', 'MicroQRCode'],
