@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QRスキャナー</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.1.4/umd/index.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -19,12 +19,29 @@
       font-size: 1.3rem;
       margin-bottom: 16px;
     }
-    #reader {
+    #video-container {
       width: 100%;
       max-width: 480px;
       margin: 0 auto;
       border-radius: 12px;
       overflow: hidden;
+      background: #000;
+      position: relative;
+    }
+    video {
+      width: 100%;
+      display: block;
+    }
+    #overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      height: 200px;
+      border: 2px solid #2d6a4f;
+      border-radius: 8px;
+      pointer-events: none;
     }
     #result-box {
       max-width: 480px;
@@ -36,17 +53,9 @@
       display: none;
     }
     #result-box h2 { color: #2d6a4f; font-size: 1rem; margin-bottom: 8px; }
-    #result-text {
-      word-break: break-all;
-      font-size: 1rem;
-      color: #333;
-    }
+    #result-text { word-break: break-all; font-size: 1rem; color: #333; }
     #result-text a { color: #1a73e8; }
-    .btn-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 12px;
-    }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
     button {
       flex: 1;
       padding: 10px;
@@ -62,11 +71,7 @@
       max-width: 480px;
       margin: 16px auto 0;
     }
-    #history-box h2 {
-      color: #555;
-      font-size: 0.95rem;
-      margin-bottom: 8px;
-    }
+    #history-box h2 { color: #555; font-size: 0.95rem; margin-bottom: 8px; }
     .history-item {
       background: white;
       border-radius: 8px;
@@ -77,11 +82,7 @@
       word-break: break-all;
       color: #333;
     }
-    .history-item .time {
-      font-size: 0.75rem;
-      color: #aaa;
-      margin-bottom: 4px;
-    }
+    .history-item .time { font-size: 0.75rem; color: #aaa; margin-bottom: 4px; }
     #btn-clear-history {
       width: 100%;
       padding: 8px;
@@ -93,12 +94,22 @@
       cursor: pointer;
       margin-top: 4px;
     }
+    #status {
+      text-align: center;
+      font-size: 0.85rem;
+      color: #888;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
   <h1>QR / マイクロQR スキャナー</h1>
 
-  <div id="reader"></div>
+  <div id="video-container">
+    <video id="video" autoplay muted playsinline></video>
+    <div id="overlay"></div>
+  </div>
+  <div id="status">カメラを起動中...</div>
 
   <div id="result-box">
     <h2>読み取り結果</h2>
@@ -117,65 +128,75 @@
   </div>
 
   <script>
+    const { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } = ZXingBrowser;
+
     let lastResult = '';
-    let scanner;
+    let controls = null;
+
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.QR_CODE,
+      BarcodeFormat.DATA_MATRIX,
+      BarcodeFormat.AZTEC,
+      BarcodeFormat.PDF_417,
+    ]);
+    hints.set(DecodeHintType.TRY_HARDER, true);
+
+    const reader = new BrowserMultiFormatReader(hints, {
+      delayBetweenScanAttempts: 50,
+    });
 
     function isUrl(text) {
       return /^https?:\/\//i.test(text);
     }
 
-    function startScanner() {
-      scanner = new Html5Qrcode('reader');
-      scanner.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.QR_CODE,
-            Html5QrcodeSupportedFormats.MICRO_QR_CODE,
-            Html5QrcodeSupportedFormats.DATA_MATRIX,
-            Html5QrcodeSupportedFormats.AZTEC,
-          ]
-        },
-        onScanSuccess,
-        () => {}
-      );
+    async function startScanner() {
+      document.getElementById('status').textContent = 'スキャン中...';
+      try {
+        controls = await reader.decodeFromVideoDevice(
+          undefined,
+          'video',
+          (result, error) => {
+            if (result) {
+              const text = result.getText();
+              if (text === lastResult) return;
+              lastResult = text;
+              onScanSuccess(text);
+            }
+          }
+        );
+      } catch (e) {
+        document.getElementById('status').textContent = 'カメラの起動に失敗しました。カメラへのアクセスを許可してください。';
+      }
     }
 
     function onScanSuccess(text) {
-      if (text === lastResult) return;
-      lastResult = text;
+      if (controls) { controls.stop(); controls = null; }
 
-      scanner.stop().then(() => {
-        const box = document.getElementById('result-box');
-        const el = document.getElementById('result-text');
-        box.style.display = 'block';
+      document.getElementById('status').textContent = '';
+      const box = document.getElementById('result-box');
+      const el = document.getElementById('result-text');
+      box.style.display = 'block';
 
-        if (isUrl(text)) {
-          el.innerHTML = `<a href="${text}" target="_blank">${text}</a>`;
-          document.getElementById('btn-open').style.display = 'block';
-        } else {
-          el.textContent = text;
-          document.getElementById('btn-open').style.display = 'none';
-        }
+      if (isUrl(text)) {
+        el.innerHTML = `<a href="${text}" target="_blank">${text}</a>`;
+        document.getElementById('btn-open').style.display = 'block';
+      } else {
+        el.textContent = text;
+        document.getElementById('btn-open').style.display = 'none';
+      }
 
-        saveHistory(text);
-      });
+      saveHistory(text);
     }
 
     function copyResult() {
       navigator.clipboard.writeText(lastResult).then(() => {
         document.getElementById('btn-copy').textContent = 'コピーしました！';
-        setTimeout(() => {
-          document.getElementById('btn-copy').textContent = 'コピー';
-        }, 2000);
+        setTimeout(() => { document.getElementById('btn-copy').textContent = 'コピー'; }, 2000);
       });
     }
 
-    function openUrl() {
-      window.open(lastResult, '_blank');
-    }
+    function openUrl() { window.open(lastResult, '_blank'); }
 
     function rescan() {
       lastResult = '';
