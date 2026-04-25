@@ -87,6 +87,7 @@
     /* 画像アップロード */
     #image-mode { max-width: 480px; margin: 0 auto; }
     .upload-area {
+      display: block;   /* <label> デフォルト inline による border 断片化の修正 */
       background: white; border: 2px dashed #cbd5e1; border-radius: 12px;
       padding: 24px 16px; text-align: center; cursor: pointer;
     }
