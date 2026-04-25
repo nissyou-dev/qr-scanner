@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- Phase 1-b S4: GitHub Pages のブラウザキャッシュで旧 standalone-only 版が
+       session モード起動時に配られる事故を防ぐ。CDN 側キャッシュは制御不可。 -->
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <title>QRスキャナー（zxing-wasm + 9パス前処理）</title>
   <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@1/dist/iife/reader/index.js"></script>
   <style>
@@ -171,17 +175,59 @@
       width: 100%; padding: 8px; background: #fee2e2; color: #b91c1c;
       border: none; border-radius: 8px; font-size: 0.85rem; cursor: pointer; margin-top: 4px;
     }
+
+    /* ===========================================================
+       Phase 1-b S4: session モード（production camera-qr 連携）
+       - body[data-mode="session"] スコープで CSS を完全分離
+       - .standalone-only / .session-only で DOM 切替
+       =========================================================== */
+    body[data-mode="standalone"] .session-only { display: none !important; }
+    body[data-mode="session"]    .standalone-only { display: none !important; }
+
+    /* session モード共通 */
+    body[data-mode="session"] { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a202c; line-height: 1.5; }
+    body[data-mode="session"] #session-main { max-width: 560px; margin: 0 auto; }
+    body[data-mode="session"] #session-title { font-size: 1.15rem; color: #2d6a4f; margin-bottom: 8px; text-align: left; }
+    body[data-mode="session"] .muted { color: #64748b; font-size: 0.8rem; }
+    body[data-mode="session"] .session-id-line { font-family: ui-monospace, monospace; font-size: 0.75rem; color: #475569; word-break: break-all; margin-bottom: 4px; }
+    body[data-mode="session"] .exp-line { color: #475569; font-size: 0.85rem; margin-bottom: 12px; }
+    body[data-mode="session"] .screen { display: none; background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    body[data-mode="session"] .screen.active { display: block; }
+    body[data-mode="session"] .screen.error { border-left: 4px solid #b45309; padding-left: 12px; }
+    body[data-mode="session"] .screen.success { border-left: 4px solid #2d6a4f; padding-left: 12px; }
+    body[data-mode="session"] .session-btn, body[data-mode="session"] .file-btn {
+      display: inline-block; padding: 12px 16px; border: none; border-radius: 8px;
+      font-size: 0.95rem; font-weight: 600; color: white; cursor: pointer;
+      background: #2d6a4f; touch-action: manipulation;
+    }
+    body[data-mode="session"] .session-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    body[data-mode="session"] .session-btn.alt { background: #475569; }
+    body[data-mode="session"] .session-btn.warn { background: #b45309; }
+    body[data-mode="session"] .session-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    body[data-mode="session"] .session-row > * { flex: 1 1 auto; min-width: 120px; }
+    body[data-mode="session"] #f-img-session { display: none; }
+    body[data-mode="session"] .session-preview { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #cbd5e1; }
+    body[data-mode="session"] .session-result { margin-top: 12px; font-size: 0.9rem; }
+    body[data-mode="session"] .session-result .ok { color: #2d6a4f; font-weight: 600; }
+    body[data-mode="session"] .session-result .ng { color: #b45309; font-weight: 600; }
+    body[data-mode="session"] .session-result code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, monospace; word-break: break-all; }
+    body[data-mode="session"] details.session-raw { margin-top: 10px; font-size: 0.75rem; color: #64748b; }
+    body[data-mode="session"] details.session-raw pre { background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 4px; max-height: 10em; overflow: auto; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, monospace; font-size: 0.7rem; }
+    body[data-mode="session"] #session-send-log { background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 4px; font-size: 0.75rem; font-family: ui-monospace, monospace; max-height: 18em; overflow: auto; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
+    body[data-mode="session"] .session-hint { background: #fef3c7; color: #78350f; padding: 8px; border-radius: 6px; font-size: 0.8rem; margin-top: 8px; }
+    body[data-mode="session"] #session-invalid-detail { font-size: 0.75rem; margin-top: 8px; color: #78350f; }
   </style>
 </head>
 <body>
-  <h1>QR / マイクロQR スキャナー</h1>
+  <!-- standalone モード DOM（既存・通常の QR スキャナー用途） -->
+  <h1 class="standalone-only">QR / マイクロQR スキャナー</h1>
 
-  <div class="tabs">
+  <div class="tabs standalone-only">
     <button class="tab active" data-mode="camera">📷 カメラ</button>
     <button class="tab" data-mode="image">🖼 画像から</button>
   </div>
 
-  <div id="camera-mode" class="mode active">
+  <div id="camera-mode" class="mode active standalone-only">
     <div id="video-container">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="canvas"></canvas>
@@ -196,7 +242,7 @@
     <div id="status">初期化中...</div>
   </div>
 
-  <div id="image-mode" class="mode">
+  <div id="image-mode" class="mode standalone-only">
     <label for="file-input" class="upload-area">
       <div style="font-size: 2rem;">📁</div>
       <p>タップして画像を選択</p>
@@ -212,7 +258,7 @@
     </div>
   </div>
 
-  <div id="result-box">
+  <div id="result-box" class="standalone-only">
     <h2>読み取り結果 <span id="result-count"></span></h2>
     <div id="result-list"></div>
     <div class="btn-row">
@@ -228,15 +274,116 @@
     </details>
   </div>
 
-  <div id="history-box" style="display:none">
+  <div id="history-box" class="standalone-only" style="display:none">
     <h2>履歴</h2>
     <div id="history-list"></div>
     <button id="btn-clear-history" type="button">履歴を削除</button>
   </div>
 
+  <!-- ===========================================================
+       session モード DOM（Phase 1-b / production 連携用）
+       body[data-mode="session"] のときのみ表示される。
+       scan-session.html を移植、関数は _session_ プレフィクスに統一。
+       =========================================================== -->
+  <main id="session-main" class="session-only">
+    <h1 id="session-title">QRスキャン（Phase 1-b）</h1>
+    <div class="session-id-line" id="session-id-text">—</div>
+    <div class="exp-line">残り時間: <span id="session-exp-countdown">計測中…</span></div>
+
+    <!-- 初期: 画像選択 -->
+    <div class="screen" id="screen-pick">
+      <p class="muted">銘板を撮影するか、ライブラリから画像を選択してください。</p>
+      <div class="session-row">
+        <label class="file-btn" for="f-img-session">📷 撮影する / 画像を選ぶ</label>
+        <input type="file" id="f-img-session" accept="image/*">
+      </div>
+      <div class="session-row">
+        <button class="session-btn alt" id="btn-session-cancel-pick">キャンセル</button>
+      </div>
+    </div>
+
+    <!-- スキャン中 -->
+    <div class="screen" id="screen-scanning">
+      <p class="muted">画像を処理中…</p>
+      <img id="session-preview-scan" class="session-preview" alt="">
+    </div>
+
+    <!-- スキャン完了 -->
+    <div class="screen" id="screen-after">
+      <img id="session-preview-after" class="session-preview" alt="">
+      <div class="session-result" id="session-scan-result"></div>
+      <details class="session-raw">
+        <summary>raw codes (debug)</summary>
+        <pre id="session-raw-codes">—</pre>
+      </details>
+      <div class="session-row">
+        <button class="session-btn" id="btn-session-send" disabled>送信</button>
+        <button class="session-btn alt" id="btn-session-retake">撮り直し</button>
+      </div>
+      <div class="session-row">
+        <button class="session-btn alt" id="btn-session-cancel-after">キャンセル</button>
+      </div>
+    </div>
+
+    <!-- 送信中 -->
+    <div class="screen" id="screen-sending">
+      <p class="muted">送信中…</p>
+      <pre id="session-send-log"></pre>
+    </div>
+
+    <!-- 送信完了 -->
+    <div class="screen success" id="screen-sent">
+      <p><strong>✅ 送信完了</strong></p>
+      <p class="muted" id="session-sent-status">status: —</p>
+      <p class="session-hint">このタブは自動で閉じられるか、下のボタンで閉じてください。</p>
+      <div class="session-row">
+        <button class="session-btn" id="btn-session-close-sent">閉じる</button>
+      </div>
+    </div>
+
+    <!-- エラー: invalid_params -->
+    <div class="screen error" id="screen-invalid">
+      <p><strong>⚠ 起動パラメータが不正です</strong></p>
+      <p class="muted">production 画面から「QRスキャン」ボタンで起動してください。</p>
+      <pre id="session-invalid-detail"></pre>
+      <div class="session-row">
+        <button class="session-btn" id="btn-session-close-invalid">閉じる</button>
+      </div>
+    </div>
+
+    <!-- エラー: expired -->
+    <div class="screen error" id="screen-expired">
+      <p><strong>⏱ セッションが期限切れです</strong></p>
+      <p class="muted">production 画面に戻って「QRスキャン」をもう一度押してください。</p>
+      <div class="session-row">
+        <button class="session-btn" id="btn-session-close-expired">閉じる</button>
+      </div>
+    </div>
+
+    <!-- エラー: send_failed -->
+    <div class="screen error" id="screen-failed">
+      <p><strong>⚠ 送信失敗</strong></p>
+      <p class="muted" id="session-failed-reason">—</p>
+      <div class="session-row">
+        <button class="session-btn alt" id="btn-session-retake-failed">撮り直し</button>
+        <button class="session-btn" id="btn-session-close-failed">閉じる</button>
+      </div>
+    </div>
+  </main>
+
   <script>
+    // ============================================================
+    // Phase 1-b S4: モード判定（最優先で実行）
+    //   URL クエリに session/cb/exp のいずれかがあれば session モード。
+    //   欠落があっても session に入れて invalid 画面で原因表示する
+    //   （standalone に誤落ちさせない設計判断。PHASE1B_S4_DESIGN.md §1）
+    // ============================================================
+    const _qs = new URLSearchParams(location.search);
+    const SESSION_MODE = _qs.has('session') || _qs.has('cb') || _qs.has('exp');
+    document.body.dataset.mode = SESSION_MODE ? 'session' : 'standalone';
+
     // ========================================
-    // 9パス前処理の定義
+    // 9パス前処理の定義（両モード共通・実使用は standalone のみ）
     // ========================================
     const BENCH_PASSES = [
       { name: 'original',       scale: 1, op: 'none' },
@@ -478,6 +625,9 @@
 
     // カメラ
     async function startCamera() {
+      // Phase 1-b S4: session モードではカメラを起動しない（事故防止の二重ガード。
+      // init() 側でも早期 return するが、switchMode() 経由で呼ばれた場合も弾く）
+      if (SESSION_MODE) return;
       if (scanning) return;
       document.getElementById('status').textContent = 'カメラ起動中...';
       try {
@@ -779,14 +929,388 @@
 
     // 起動
     async function init() {
+      // Phase 1-b S4: session モードでは standalone の init を走らせない。
+      // ライブラリロードは _session_bootstrap 内で行う（invalid/expired 時の無駄を削る）
+      if (SESSION_MODE) {
+        _session_bootstrap();
+        return;
+      }
       document.getElementById('status').textContent = 'ライブラリ読み込み中...';
       await ZXingWASM.getZXingModule();
       document.getElementById('status').textContent = 'カメラ起動中...';
       startCamera();
     }
 
+    // Phase 1-b S4: renderHistory は session モードでも呼ばれるが、
+    //   #history-box は .standalone-only で非表示のためユーザーには見えない。
+    //   saveHistory は standalone の onScanSuccess からのみ呼ばれるので
+    //   session モードで localStorage 汚染は発生しない（設計書 §5）
     renderHistory();
     init();
+
+    // ============================================================
+    // Phase 1-b S4: session モード実装
+    //   scan-session.html からの移植。関数は _session_ プレフィクス、
+    //   既存 escapeHtml は再利用、既存 params/show/showFailed 等との
+    //   衝突を避けるため新シンボルで再定義（PHASE1B_S4_DESIGN.md §4）
+    // ============================================================
+    var _SESSION_PARAMS = _qs;
+    var _SESSION_ID = _SESSION_PARAMS.get('session') || '';
+    var _SESSION_CB = _SESSION_PARAMS.get('cb') || '';
+    var _SESSION_EXP = Number(_SESSION_PARAMS.get('exp') || 0);
+    var _SESSION_UI_ORIGIN = _SESSION_PARAMS.get('origin') || '';
+
+    var _SESSION_CB_RE = /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[^\/]+\/exec$/;
+    var _SESSION_ORIGIN_RE = /^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/;
+    var _SESSION_CAN_POSTMSG = !!_SESSION_UI_ORIGIN && _SESSION_ORIGIN_RE.test(_SESSION_UI_ORIGIN);
+
+    var _sessionResult = null;
+    var _sessionImageB64 = '';
+    var _sessionDone = false;
+    var _sessionExpTimer = null;
+
+    function _session_show(id) {
+      var all = document.querySelectorAll('#session-main .screen');
+      for (var i = 0; i < all.length; i++) all[i].classList.remove('active');
+      var t = document.getElementById('screen-' + id);
+      if (t) t.classList.add('active');
+    }
+
+    function _session_logSend(msg) {
+      var el = document.getElementById('session-send-log');
+      if (!el) return;
+      var d = new Date();
+      var ts = d.toTimeString().substring(0, 8);
+      el.textContent += '[' + ts + '] ' + msg + '\n';
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function _session_validateParams() {
+      var issues = [];
+      if (!_SESSION_ID) issues.push('session 欠落');
+      if (!_SESSION_CB) issues.push('cb 欠落');
+      else if (!_SESSION_CB_RE.test(_SESSION_CB)) issues.push('cb 形式不正: ' + _SESSION_CB);
+      if (!_SESSION_EXP) issues.push('exp 欠落');
+      if (!_SESSION_UI_ORIGIN) issues.push('origin 欠落');
+      return issues;
+    }
+
+    function _session_formatLeft(ms) {
+      if (ms < 0) ms = 0;
+      var s = Math.floor(ms / 1000);
+      var m = Math.floor(s / 60);
+      s = s % 60;
+      return m + ' 分 ' + s + ' 秒';
+    }
+
+    function _session_startExpTimer() {
+      document.getElementById('session-id-text').textContent = 'session: ' + _SESSION_ID;
+      function tick() {
+        var left = _SESSION_EXP - Date.now();
+        if (left <= 0) {
+          clearInterval(_sessionExpTimer);
+          _sessionExpTimer = null;
+          if (!_sessionDone) _session_show('expired');
+          return;
+        }
+        document.getElementById('session-exp-countdown').textContent = _session_formatLeft(left);
+      }
+      tick();
+      _sessionExpTimer = setInterval(tick, 1000);
+    }
+
+    function _session_loadImage(file) {
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        img.onload = function () { resolve(img); };
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    function _session_compressImage(file, maxLongEdge, quality) {
+      return _session_loadImage(file).then(function (img) {
+        var w = img.naturalWidth, h = img.naturalHeight;
+        var long = Math.max(w, h);
+        if (long > maxLongEdge) {
+          var r = maxLongEdge / long;
+          w = Math.round(w * r);
+          h = Math.round(h * r);
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl = canvas.toDataURL('image/jpeg', quality);
+        var bytes = Math.round((dataUrl.length - ('data:image/jpeg;base64,'.length)) * 3 / 4);
+        return { b64: dataUrl, bytes: bytes, w: w, h: h, canvas: canvas };
+      });
+    }
+
+    function _session_scanFromCanvas(canvas) {
+      var cx = canvas.getContext('2d');
+      var imageData = cx.getImageData(0, 0, canvas.width, canvas.height);
+      return ZXingWASM.getZXingModule().then(function () {
+        return ZXingWASM.readBarcodesFromImageData(imageData, {
+          formats: ['QRCode', 'MicroQRCode'],
+          tryHarder: true,
+          tryRotate: true,
+          tryInvert: true,
+          tryDownscale: true
+        });
+      });
+    }
+
+    function _session_classifyCodes(codes) {
+      var qr_raw = '', uqr_raw = '';
+      for (var i = 0; i < codes.length; i++) {
+        var text = String(codes[i].text || '').trim();
+        var format = String(codes[i].format || '');
+        if (!text) continue;
+        if (format === 'MicroQRCode' || /^2[0-9]{6}$/.test(text)) {
+          if (!uqr_raw) uqr_raw = text;
+        } else {
+          if (!qr_raw) qr_raw = text;
+        }
+      }
+      return { qr_raw: qr_raw, uqr_raw: uqr_raw };
+    }
+
+    function _session_sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    function _session_postOnce(payload, timeoutMs) {
+      var ctrl = new AbortController();
+      var tid = setTimeout(function () { ctrl.abort(); }, timeoutMs || 30000);
+      return fetch(_SESSION_CB, {
+        method: 'POST',
+        body: new URLSearchParams({ payload: JSON.stringify(payload) }),
+        signal: ctrl.signal
+      }).then(function (res) {
+        clearTimeout(tid);
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          return { status: res.status, body: body };
+        });
+      }).catch(function (err) {
+        clearTimeout(tid);
+        if (err.name === 'AbortError') throw { _kind: 'timeout' };
+        throw { _kind: 'network', err: err };
+      });
+    }
+
+    function _session_sendWithRetry(payload) {
+      var attempts = [0, 1000, 3000, 9000];
+      var last5xxTried = false;
+      function tryAt(i) {
+        if (i >= attempts.length) return Promise.resolve({ ok: false, phase: 'net_fail_all' });
+        return _session_sleep(attempts[i]).then(function () {
+          _session_logSend('attempt ' + (i + 1) + '/' + attempts.length + ' (wait=' + attempts[i] + 'ms)');
+          return _session_postOnce(payload, 30000).then(function (r) {
+            if (r.status >= 400 && r.status < 500) {
+              _session_logSend('4xx ' + r.status + ' → 停止: ' + JSON.stringify(r.body).slice(0, 120));
+              return { ok: false, phase: 'client_error', status: r.status, body: r.body };
+            }
+            if (r.status >= 500) {
+              if (!last5xxTried) {
+                last5xxTried = true;
+                _session_logSend('5xx ' + r.status + ' → 2s 後に 1 回だけ再試行');
+                return _session_sleep(2000).then(function () {
+                  return _session_postOnce(payload, 30000).then(function (r2) {
+                    if (r2.status >= 200 && r2.status < 300) return { ok: true, body: r2.body };
+                    return { ok: false, phase: 'server_error', status: r2.status };
+                  }).catch(function () { return { ok: false, phase: 'server_error' }; });
+                });
+              }
+              return { ok: false, phase: 'server_error', status: r.status };
+            }
+            return { ok: true, body: r.body };
+          }).catch(function (e) {
+            if (e && e._kind === 'timeout') {
+              _session_logSend('timeout 30s');
+              return { ok: false, phase: 'timeout' };
+            }
+            _session_logSend('network error, 次の待機へ');
+            return tryAt(i + 1);
+          });
+        });
+      }
+      return tryAt(0);
+    }
+
+    function _session_notifyParent() {
+      if (!_SESSION_CAN_POSTMSG) { _session_logSend('postMessage スキップ（origin ホワイトリスト不一致）'); return; }
+      if (!window.opener || window.opener.closed) { _session_logSend('postMessage スキップ（opener 無し）'); return; }
+      try {
+        window.opener.postMessage({ type: 'scan_done', session_id: _SESSION_ID }, _SESSION_UI_ORIGIN);
+        _session_logSend('postMessage 送信: ' + _SESSION_UI_ORIGIN);
+      } catch (e) {
+        _session_logSend('postMessage 失敗: ' + e.message);
+      }
+    }
+
+    function _session_onFilePicked(file) {
+      _session_show('scanning');
+      _session_compressImage(file, 1600, 0.8).then(function (c) {
+        _sessionImageB64 = c.b64;
+        document.getElementById('session-preview-scan').src = c.b64;
+        document.getElementById('session-preview-after').src = c.b64;
+        return _session_scanFromCanvas(c.canvas);
+      }).then(function (codes) {
+        var cls = _session_classifyCodes(codes || []);
+        _sessionResult = { qr_raw: cls.qr_raw, uqr_raw: cls.uqr_raw, raw_codes: codes || [] };
+        var resEl = document.getElementById('session-scan-result');
+        if (cls.qr_raw || cls.uqr_raw) {
+          var html = '';
+          if (cls.qr_raw)  html += '<div class="ok">✅ 銘板QR: <code>' + escapeHtml(cls.qr_raw) + '</code></div>';
+          if (cls.uqr_raw) html += '<div class="ok">✅ μQR: <code>' + escapeHtml(cls.uqr_raw) + '</code></div>';
+          resEl.innerHTML = html;
+          document.getElementById('btn-session-send').disabled = false;
+        } else {
+          resEl.innerHTML = '<div class="ng">⚠ QRコードが検出できませんでした。撮り直してください。</div>';
+          document.getElementById('btn-session-send').disabled = true;
+        }
+        document.getElementById('session-raw-codes').textContent =
+          (codes && codes.length) ? JSON.stringify(codes, null, 2).slice(0, 2000) : '(codes empty)';
+        _session_show('after');
+      }).catch(function (err) {
+        _sessionResult = null;
+        document.getElementById('session-scan-result').innerHTML =
+          '<div class="ng">画像処理エラー: ' + escapeHtml(String(err && err.message || err)) + '</div>';
+        document.getElementById('btn-session-send').disabled = true;
+        _session_show('after');
+      });
+    }
+
+    function _session_onRetakeClick() {
+      _sessionResult = null;
+      _sessionImageB64 = '';
+      document.getElementById('btn-session-send').disabled = true;
+      document.getElementById('f-img-session').value = '';
+      _session_show('pick');
+    }
+
+    function _session_showFailed(r) {
+      var msg = '送信失敗: phase=' + (r.phase || '?') + ' status=' + (r.status || '?');
+      if (r.body) msg += ' body=' + JSON.stringify(r.body).slice(0, 160);
+      _session_logSend(msg);
+      document.getElementById('session-failed-reason').textContent = msg;
+      _session_show('failed');
+    }
+
+    function _session_onSendClick() {
+      if (!_sessionResult || (!_sessionResult.qr_raw && !_sessionResult.uqr_raw)) return;
+      _session_show('sending');
+      _session_logSend('送信開始: session=' + _SESSION_ID);
+      var payload = {
+        session_id: _SESSION_ID,
+        status: 'success',
+        qr_raw: _sessionResult.qr_raw,
+        uqr_raw: _sessionResult.uqr_raw,
+        image_b64: _sessionImageB64,
+        image_ext: 'jpg',
+        client_ts: Date.now()
+      };
+      _session_sendWithRetry(payload).then(function (r) {
+        if (r.ok && r.body && r.body.ok) {
+          _session_logSend('OK: ' + JSON.stringify(r.body));
+          _sessionDone = true;
+          document.getElementById('session-sent-status').textContent =
+            'status: ' + (r.body.status || 'success') + ' / file_id: ' + (r.body.file_id || '(none)');
+          _session_notifyParent();
+          _session_show('sent');
+          return;
+        }
+        if (r.phase === 'timeout') {
+          _session_logSend('timeout → qr_only フォールバック（画像なし）で再送信');
+          var p2 = {
+            session_id: _SESSION_ID,
+            status: 'qr_only',
+            qr_raw: _sessionResult.qr_raw,
+            uqr_raw: _sessionResult.uqr_raw,
+            client_ts: Date.now()
+          };
+          return _session_sendWithRetry(p2).then(function (r2) {
+            if (r2.ok && r2.body && r2.body.ok) {
+              _session_logSend('OK (qr_only): ' + JSON.stringify(r2.body));
+              _sessionDone = true;
+              document.getElementById('session-sent-status').textContent = 'status: qr_only (画像送信失敗)';
+              _session_notifyParent();
+              _session_show('sent');
+            } else {
+              _session_showFailed(r2);
+            }
+          });
+        }
+        _session_showFailed(r);
+      });
+    }
+
+    function _session_sendCancel(reason) {
+      if (!_SESSION_CB_RE.test(_SESSION_CB)) return Promise.resolve();
+      var payload = { session_id: _SESSION_ID, status: 'cancelled', client_ts: Date.now(), reason: reason };
+      return fetch(_SESSION_CB, {
+        method: 'POST',
+        body: new URLSearchParams({ payload: JSON.stringify(payload) })
+      }).catch(function () { /* silent */ });
+    }
+
+    function _session_onCancelClick() {
+      _sessionDone = true;
+      _session_sendCancel('user_cancel').finally(function () {
+        try { window.close(); } catch (e) {}
+        _session_show('sent');
+        document.getElementById('session-sent-status').textContent = 'status: cancelled';
+      });
+    }
+
+    function _session_onCloseClick() {
+      try { window.close(); } catch (e) {}
+      document.body.innerHTML = '<p style="padding:20px;color:#64748b;">このタブは閉じて OK です。</p>';
+    }
+
+    function _session_bindHandlers() {
+      // file input
+      var fi = document.getElementById('f-img-session');
+      fi.addEventListener('click', function () { this.value = ''; });
+      fi.addEventListener('change', function (ev) {
+        var file = ev.target.files && ev.target.files[0];
+        if (file) _session_onFilePicked(file);
+      });
+      // buttons
+      document.getElementById('btn-session-send').addEventListener('click', _session_onSendClick);
+      document.getElementById('btn-session-retake').addEventListener('click', _session_onRetakeClick);
+      document.getElementById('btn-session-retake-failed').addEventListener('click', _session_onRetakeClick);
+      document.getElementById('btn-session-cancel-pick').addEventListener('click', _session_onCancelClick);
+      document.getElementById('btn-session-cancel-after').addEventListener('click', _session_onCancelClick);
+      document.getElementById('btn-session-close-sent').addEventListener('click', _session_onCloseClick);
+      document.getElementById('btn-session-close-invalid').addEventListener('click', _session_onCloseClick);
+      document.getElementById('btn-session-close-expired').addEventListener('click', _session_onCloseClick);
+      document.getElementById('btn-session-close-failed').addEventListener('click', _session_onCloseClick);
+
+      // pagehide: bfcache 対応の unload イベント。sendBeacon で cancelled を投げる
+      window.addEventListener('pagehide', function () {
+        if (_sessionDone) return;
+        if (!_SESSION_CB_RE.test(_SESSION_CB)) return;
+        var payload = { session_id: _SESSION_ID, status: 'cancelled', client_ts: Date.now(), reason: 'pagehide' };
+        var body = new URLSearchParams({ payload: JSON.stringify(payload) }).toString();
+        var blob = new Blob([body], { type: 'application/x-www-form-urlencoded' });
+        if (navigator.sendBeacon) navigator.sendBeacon(_SESSION_CB, blob);
+      });
+    }
+
+    function _session_bootstrap() {
+      _session_bindHandlers();
+      var issues = _session_validateParams();
+      if (issues.length) {
+        document.getElementById('session-invalid-detail').textContent = issues.join('\n');
+        _session_show('invalid');
+        return;
+      }
+      if (Date.now() > _SESSION_EXP) {
+        _session_show('expired');
+        return;
+      }
+      _session_startExpTimer();
+      _session_show('pick');
+    }
   </script>
 </body>
 </html>
