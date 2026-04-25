@@ -942,18 +942,16 @@
       startCamera();
     }
 
-    // Phase 1-b S4: renderHistory は session モードでも呼ばれるが、
-    //   #history-box は .standalone-only で非表示のためユーザーには見えない。
-    //   saveHistory は standalone の onScanSuccess からのみ呼ばれるので
-    //   session モードで localStorage 汚染は発生しない（設計書 §5）
-    renderHistory();
-    init();
-
     // ============================================================
     // Phase 1-b S4: session モード実装
     //   scan-session.html からの移植。関数は _session_ プレフィクス、
     //   既存 escapeHtml は再利用、既存 params/show/showFailed 等との
     //   衝突を避けるため新シンボルで再定義（PHASE1B_S4_DESIGN.md §4）
+    //
+    //   Phase 1-b S5 R2 修正: init() は _session_bootstrap() を同期呼び出しするため、
+    //   この var 群が init() より後にあると _SESSION_ID 等が undefined のまま
+    //   _session_validateParams() が走り「全パラメータ欠落」と誤判定される
+    //   （var hoisting は宣言のみで代入は行わない）。よって init() より前で初期化する。
     // ============================================================
     var _SESSION_PARAMS = _qs;
     var _SESSION_ID = _SESSION_PARAMS.get('session') || '';
@@ -969,6 +967,13 @@
     var _sessionImageB64 = '';
     var _sessionDone = false;
     var _sessionExpTimer = null;
+
+    // Phase 1-b S4: renderHistory は session モードでも呼ばれるが、
+    //   #history-box は .standalone-only で非表示のためユーザーには見えない。
+    //   saveHistory は standalone の onScanSuccess からのみ呼ばれるので
+    //   session モードで localStorage 汚染は発生しない（設計書 §5）
+    renderHistory();
+    init();
 
     function _session_show(id) {
       var all = document.querySelectorAll('#session-main .screen');
