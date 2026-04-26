@@ -108,6 +108,13 @@
       border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;
     }
     #btn-scan-image:disabled { background: #9ca3af; cursor: not-allowed; }
+    /* S5e: standalone「📥 保存」セカンダリボタン（撮影→保存→読み取り の補助操作） */
+    #btn-save-image {
+      width: 100%; margin-top: 8px; padding: 10px;
+      background: #eee; color: #333; border: none;
+      border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    }
+    #btn-save-image:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     #image-status { text-align: center; font-size: 0.85rem; color: #888; margin-top: 8px; }
 
     /* プログレス */
@@ -217,6 +224,67 @@
     body[data-mode="session"] #session-send-log { background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 4px; font-size: 0.75rem; font-family: ui-monospace, monospace; max-height: 18em; overflow: auto; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
     body[data-mode="session"] .session-hint { background: #fef3c7; color: #78350f; padding: 8px; border-radius: 6px; font-size: 0.8rem; margin-top: 8px; }
     body[data-mode="session"] #session-invalid-detail { font-size: 0.75rem; margin-top: 8px; color: #78350f; }
+
+    /* S5c: ライブビュー画面（screen-live） */
+    body[data-mode="session"] #s5c-live-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      aspect-ratio: 1 / 1;
+      margin: 0 auto;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    body[data-mode="session"] #s5c-video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    body[data-mode="session"] #s5c-canvas { display: none; }
+    body[data-mode="session"] #s5c-overlay-frame {
+      position: absolute;
+      top: 12%; left: 12%; right: 12%; bottom: 12%;
+      border: 2px solid rgba(45, 106, 79, 0.85);
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.18);
+      pointer-events: none;
+      transition: border-color 0.15s ease;
+    }
+    body[data-mode="session"] #s5c-overlay-frame.detect { border-color: #22c55e; }
+    body[data-mode="session"] #s5c-overlay-frame.warn   { border-color: #f59e0b; }
+    body[data-mode="session"] #s5c-live-status { margin-top: 10px; font-size: 0.85rem; }
+    body[data-mode="session"] #s5c-live-warn {
+      display: none;
+      margin-top: 10px; padding: 8px 10px;
+      background: #fef3c7; color: #78350f;
+      border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+    }
+    body[data-mode="session"] #s5c-live-warn.show { display: block; }
+
+    /* S5e: 復旧ダイアログ（session モード起動時に未送信画像を救う） */
+    body[data-mode="session"] #recovery-dialog {
+      position: fixed; inset: 0; z-index: 999;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(15, 23, 42, 0.55);
+      padding: 16px;
+    }
+    body[data-mode="session"] #recovery-dialog.open { display: flex; }
+    body[data-mode="session"] .recovery-inner {
+      background: #fff; border-radius: 12px; padding: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      width: 100%; max-width: 420px; max-height: 90vh; overflow: auto;
+    }
+    body[data-mode="session"] .recovery-inner h3 { font-size: 1.05rem; margin: 0 0 12px; color: #0f172a; }
+    body[data-mode="session"] .recovery-section {
+      border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-top: 10px;
+    }
+    body[data-mode="session"] .recovery-section h4 {
+      font-size: 0.95rem; margin: 0 0 6px; color: #1e293b;
+    }
+    body[data-mode="session"] .recovery-section .muted { font-size: 0.8rem; color: #64748b; margin: 0 0 8px; }
+    body[data-mode="session"] .recovery-section.other { border-color: #fcd34d; background: #fffbeb; }
+    body[data-mode="session"] #recovery-status { font-size: 0.85rem; color: #475569; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -254,6 +322,7 @@
     <div id="preview-container">
       <img id="preview-img" alt="プレビュー">
       <button id="btn-scan-image" type="button">QRを読み取る（9パス）</button>
+      <button id="btn-save-image" type="button" disabled>📥 保存</button>
       <div class="progress-wrap"><div class="progress-bar"></div></div>
       <div id="image-status"></div>
     </div>
@@ -298,8 +367,26 @@
         <label class="file-btn" for="f-img-session">📷 撮影する / 画像を選ぶ</label>
         <input type="file" id="f-img-session" accept="image/*">
       </div>
+      <!-- S5c: ライブビュー認識（クルクルQR 同等の体験） -->
+      <div class="session-row">
+        <button class="session-btn alt" id="btn-s5c-start-live">📲 ライブビュー開始</button>
+      </div>
       <div class="session-row">
         <button class="session-btn alt" id="btn-session-cancel-pick">キャンセル</button>
+      </div>
+    </div>
+
+    <!-- S5c: ライブビュー画面（クルクルQR 同等のリアルタイム認識） -->
+    <div class="screen" id="screen-live">
+      <div id="s5c-live-wrap">
+        <video id="s5c-video" autoplay muted playsinline></video>
+        <canvas id="s5c-canvas"></canvas>
+        <div id="s5c-overlay-frame" aria-hidden="true"></div>
+      </div>
+      <p id="s5c-live-status" class="muted">カメラ起動中…</p>
+      <div id="s5c-live-warn">⚠ 業務対象外の QR です（管理シール）</div>
+      <div class="session-row">
+        <button class="session-btn alt" id="btn-s5c-live-cancel">中止</button>
       </div>
     </div>
 
@@ -317,6 +404,13 @@
         <summary>raw codes (debug)</summary>
         <pre id="session-raw-codes">—</pre>
       </details>
+      <div class="session-row">
+        <button class="session-btn alt" id="btn-session-save-local">📥 保存</button>
+      </div>
+      <!-- S5d: 追加 QR スキャン行（残数 1-2 のみ表示・銘板アップ画像は保持） -->
+      <div class="session-row" id="row-s5d-add-scan" style="display:none">
+        <button class="session-btn alt" id="btn-s5d-add-scan">📲 QR を追加スキャン（あと <span id="s5d-remaining">2</span> 件）</button>
+      </div>
       <div class="session-row">
         <button class="session-btn" id="btn-session-send" disabled>送信</button>
         <button class="session-btn alt" id="btn-session-retake">撮り直し</button>
@@ -368,6 +462,33 @@
       <div class="session-row">
         <button class="session-btn alt" id="btn-session-retake-failed">撮り直し</button>
         <button class="session-btn" id="btn-session-close-failed">閉じる</button>
+      </div>
+    </div>
+
+    <!-- S5e: 復旧ダイアログ（session モード起動時に未送信画像があれば表示） -->
+    <div id="recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
+      <div class="recovery-inner">
+        <h3 id="recovery-title">未送信の画像があります</h3>
+        <div class="recovery-section" id="recovery-section-current" style="display:none">
+          <h4>現セッション分: <span id="recovery-current-count">0</span> 件</h4>
+          <p class="muted" id="recovery-current-oldest">最古: —</p>
+          <div class="session-row">
+            <button class="session-btn" id="btn-recovery-resend">再送信</button>
+            <button class="session-btn alt" id="btn-recovery-discard-current">破棄</button>
+          </div>
+        </div>
+        <div class="recovery-section other" id="recovery-section-other" style="display:none">
+          <h4>別セッション分（送信不可）: <span id="recovery-other-count">0</span> 件</h4>
+          <p class="muted" id="recovery-other-oldest">最古: —</p>
+          <div class="session-row">
+            <button class="session-btn alt" id="btn-recovery-save-other">📥 端末に保存</button>
+            <button class="session-btn alt" id="btn-recovery-discard-other">破棄</button>
+          </div>
+        </div>
+        <div id="recovery-status"></div>
+        <div class="session-row">
+          <button class="session-btn alt" id="btn-recovery-later">後で</button>
+        </div>
       </div>
     </div>
   </main>
@@ -742,9 +863,15 @@
     const progressWrap = document.querySelector('.progress-wrap');
     const progressBar = document.querySelector('.progress-bar');
 
+    // S5e: standalone 側で「📥 保存」用に直近選択ファイル(Blob)を保持
+    var _standaloneSelectedFile = null;
+
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      _standaloneSelectedFile = file;  // S5e: 保存ボタン用に保持
+      var saveBtn = document.getElementById('btn-save-image');
+      if (saveBtn) saveBtn.disabled = false;
       const reader = new FileReader();
       reader.onload = (ev) => {
         previewImg.src = ev.target.result;
@@ -758,6 +885,16 @@
     });
 
     btnScanImage.addEventListener('click', scanImageAllPasses);
+
+    // S5e: 「📥 保存」ボタン handler（共通 _s5e_saveImage 経由）
+    //   実装本体は Step 3-2 で完了済の _s5e_saveImage を呼ぶ。
+    //   filename は元ファイル名 or 自動生成（'meter_qr_<timestamp>.jpg'）。
+    document.getElementById('btn-save-image').addEventListener('click', function () {
+      if (!_standaloneSelectedFile) return;
+      var name = _standaloneSelectedFile.name ||
+        ('meter_qr_' + new Date().toISOString().replace(/[:.]/g, '-') + '.jpg');
+      _s5e_saveImage(_standaloneSelectedFile, name);
+    });
 
     async function scanImageAllPasses() {
       if (!previewImg.src) return;
@@ -967,6 +1104,169 @@
     var _sessionImageB64 = '';
     var _sessionDone = false;
     var _sessionExpTimer = null;
+    var _sessionPendingId = null;  // S5e: 撮影直後に IndexedDB へ put した行の id
+
+    // ============================================================
+    // Phase 1-b S5e: IndexedDB ヘルパー（撮影画像のデータロス防止）
+    //   DB 名     : meter-system-camera-qr
+    //   ストア    : pending_images（auto-increment id・session 連携用）
+    //   設計詳細  : docs/SESSION_LOG.md「S5e Step 2 設計ドラフト」§1
+    //
+    //   standalone モードからは呼ばれない（init() の SESSION_MODE 分岐後で
+    //   _session_checkPendingImages のみが触る）。standalone でも
+    //   indexedDB.open は走らないため DB は作成されない。
+    // ============================================================
+    var _S5E_DB_NAME = 'meter-system-camera-qr';
+    var _S5E_DB_VERSION = 1;
+    var _S5E_STORE = 'pending_images';
+    var _S5E_TTL_MS = 7 * 24 * 60 * 60 * 1000;  // 7 日
+
+    function _s5e_openDB() {
+      return new Promise(function (resolve, reject) {
+        var req = indexedDB.open(_S5E_DB_NAME, _S5E_DB_VERSION);
+        req.onupgradeneeded = function (ev) {
+          var db = ev.target.result;
+          if (!db.objectStoreNames.contains(_S5E_STORE)) {
+            var store = db.createObjectStore(_S5E_STORE, { keyPath: 'id', autoIncrement: true });
+            store.createIndex('by_session', 'session_id', { unique: false });
+            store.createIndex('by_saved_at', 'saved_at', { unique: false });
+          }
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      });
+    }
+
+    function _s5e_tx(mode) {
+      return _s5e_openDB().then(function (db) {
+        return { db: db, store: db.transaction(_S5E_STORE, mode).objectStore(_S5E_STORE) };
+      });
+    }
+
+    function _s5e_pendingAdd(record) {
+      // record: { blob, filename, session_id, saved_at?, retry_count? }
+      return _s5e_tx('readwrite').then(function (ctx) {
+        return new Promise(function (resolve, reject) {
+          var row = {
+            blob: record.blob,
+            filename: record.filename,
+            session_id: record.session_id || '',
+            saved_at: record.saved_at || Date.now(),
+            retry_count: record.retry_count || 0
+          };
+          var req = ctx.store.add(row);
+          req.onsuccess = function () { resolve(req.result); };  // 採番された id
+          req.onerror = function () { reject(req.error); };
+        });
+      });
+    }
+
+    function _s5e_pendingGet(id) {
+      return _s5e_tx('readonly').then(function (ctx) {
+        return new Promise(function (resolve, reject) {
+          var req = ctx.store.get(id);
+          req.onsuccess = function () { resolve(req.result || null); };
+          req.onerror = function () { reject(req.error); };
+        });
+      });
+    }
+
+    function _s5e_pendingDelete(id) {
+      return _s5e_tx('readwrite').then(function (ctx) {
+        return new Promise(function (resolve, reject) {
+          var req = ctx.store.delete(id);
+          req.onsuccess = function () { resolve(true); };
+          req.onerror = function () { reject(req.error); };
+        });
+      });
+    }
+
+    function _s5e_pendingList() {
+      return _s5e_tx('readonly').then(function (ctx) {
+        return new Promise(function (resolve, reject) {
+          var req = ctx.store.getAll();
+          req.onsuccess = function () { resolve(req.result || []); };
+          req.onerror = function () { reject(req.error); };
+        });
+      });
+    }
+
+    function _s5e_pendingCleanup() {
+      // TTL 超過分を一括削除。戻り値: 削除した id 配列
+      return _s5e_pendingList().then(function (all) {
+        var cutoff = Date.now() - _S5E_TTL_MS;
+        var expired = all.filter(function (p) { return p.saved_at < cutoff; });
+        if (expired.length === 0) return [];
+        return Promise.all(expired.map(function (p) {
+          return _s5e_pendingDelete(p.id).then(function () { return p.id; });
+        }));
+      });
+    }
+
+    // ============================================================
+    // Phase 1-b S5e: 「📥 保存」ボタンの汎用ハンドラ
+    //   1) Web Share API（File 共有可能）→ iOS Safari / Android Chrome /
+    //      Mac Safari 等の共有メニュー（写真に保存・Drive・Photos 等）
+    //   2) フォールバック → <a download> でダウンロードフォルダ保存
+    //
+    //   戻り値: { ok, mode, cancelled?, error? }
+    //     mode = 'share' | 'download'
+    //     ユーザーキャンセル (AbortError) は ok:false / cancelled:true で no-op
+    // ============================================================
+    function _s5e_saveImage(blob, filename) {
+      if (!blob) return Promise.resolve({ ok: false, error: 'no_blob' });
+      var fname = String(filename || ('image_' + Date.now() + '.jpg'));
+      var mime = blob.type || 'image/jpeg';
+
+      // Web Share API: File 共有が可能な場合のみ採用
+      try {
+        if (navigator.share && typeof navigator.canShare === 'function') {
+          var shareFile = new File([blob], fname, { type: mime });
+          if (navigator.canShare({ files: [shareFile] })) {
+            return navigator.share({ files: [shareFile], title: fname })
+              .then(function () { return { ok: true, mode: 'share' }; })
+              .catch(function (err) {
+                // ユーザーが共有シートをキャンセルした場合 → no-op
+                if (err && err.name === 'AbortError') {
+                  return { ok: false, mode: 'share', cancelled: true };
+                }
+                // 共有自体は対応しているが失敗した場合はフォールバックへ
+                return _s5e_saveImageDownload(blob, fname);
+              });
+          }
+        }
+      } catch (e) {
+        // canShare / new File 例外は静かにフォールバック
+      }
+      return _s5e_saveImageDownload(blob, fname);
+    }
+
+    // S5e: 統一ファイル名生成（保存ボタン / IndexedDB 共通）
+    //   形式: scan_<session_id|standalone>_<yyyymmdd_hhmmss>.jpg
+    function _s5e_buildFilename(sessionId) {
+      var d = new Date();
+      var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+      var ts = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+               '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+      var sid = sessionId ? String(sessionId).slice(0, 12) : 'standalone';
+      return 'scan_' + sid + '_' + ts + '.jpg';
+    }
+
+    function _s5e_saveImageDownload(blob, fname) {
+      try {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        return Promise.resolve({ ok: true, mode: 'download' });
+      } catch (e) {
+        return Promise.resolve({ ok: false, mode: 'download', error: String(e && e.message || e) });
+      }
+    }
 
     // Phase 1-b S4: renderHistory は session モードでも呼ばれるが、
     //   #history-box は .standalone-only で非表示のためユーザーには見えない。
@@ -1048,7 +1348,12 @@
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
         var dataUrl = canvas.toDataURL('image/jpeg', quality);
         var bytes = Math.round((dataUrl.length - ('data:image/jpeg;base64,'.length)) * 3 / 4);
-        return { b64: dataUrl, bytes: bytes, w: w, h: h, canvas: canvas };
+        // S5e: 既存呼び出し側 (b64/canvas 利用) と互換のまま blob プロパティを追加
+        return new Promise(function (resolve) {
+          canvas.toBlob(function (blob) {
+            resolve({ b64: dataUrl, bytes: bytes, w: w, h: h, canvas: canvas, blob: blob });
+          }, 'image/jpeg', quality);
+        });
       });
     }
 
@@ -1152,30 +1457,321 @@
       }
     }
 
+    // ============================================================
+    // Phase 1-b S5d: 複数 QR 累積管理（上限 2 枚: 銘板QR + μQR）
+    //   業務要件 docs/PHASE1B_BUSINESS_REQUIREMENTS.md §2.4 に基づく。
+    //   - 銘板QR (osaki_18 / mitsubishi_own) と μQR (jemic_uqr) の組で累積
+    //   - 銘板アップ画像は **初回スキャン時のみ採用**・追加スキャンで上書きしない
+    //   - 同一フォーマット再検出時の上書き判断は Step 3-3 で confirm 経由で確定
+    //
+    //   Step 3-1 (本セクション): init / getRemaining / mergeNewScan 基本骨格。
+    //   Step 3-3 で _s5d_canAcceptCategory + confirm 上書きを追加。
+    //   Step 3-4 で _s5c_onLiveDetected / _session_onFilePicked から merge 経由に切替。
+    // ============================================================
+
+    function _s5d_initSessionResult() {
+      _sessionResult = {
+        qr_raw: '',
+        uqr_raw: '',
+        raw_codes: [],
+        scan_count: 0,
+        last_scan_mode: '',
+        qr_history: []
+      };
+    }
+
+    function _s5d_getRemaining() {
+      if (!_sessionResult) return 2;
+      var hasQr  = !!_sessionResult.qr_raw;
+      var hasUqr = !!_sessionResult.uqr_raw;
+      return (hasQr ? 0 : 1) + (hasUqr ? 0 : 1);
+    }
+
+    // 追加スキャン行（screen-after 内）の表示状態と残数を更新。
+    //   残 0 → 行非表示・残 1-2 → 表示 + 残数を埋め込み
+    function _s5d_updateAddScanButton() {
+      var row = document.getElementById('row-s5d-add-scan');
+      if (!row) return;
+      var rem = _s5d_getRemaining();
+      if (rem <= 0) {
+        row.style.display = 'none';
+        return;
+      }
+      row.style.display = '';
+      var span = document.getElementById('s5d-remaining');
+      if (span) span.textContent = String(rem);
+    }
+
+    // 「📲 QR を追加スキャン」ボタン handler
+    //   screen-pick に戻して既存の 3 入口（撮影/選択/ライブビュー）を再利用させる。
+    //   _sessionResult / 銘板アップ画像 / IndexedDB pending は維持
+    //   （次回 _s5d_mergeNewScan で scan_count > 0 → isFirstScan=false → IndexedDB put スキップ）
+    function _s5d_onAddScanClick() {
+      // 累積中であることを明示（debug 用ログ）
+      try {
+        console.log('[S5d] add-scan: remaining=' + _s5d_getRemaining() +
+          ' qr=' + ((_sessionResult && _sessionResult.qr_raw) ? 'yes' : '-') +
+          ' uqr=' + ((_sessionResult && _sessionResult.uqr_raw) ? 'yes' : '-'));
+      } catch (e) {}
+      // 既存 file input をリセット（同じファイルを再選択可能に）
+      var fi = document.getElementById('f-img-session');
+      if (fi) fi.value = '';
+      _session_show('pick');
+    }
+
+    // 同一フォーマット再検出時の上書き確認（暫定: ネイティブ confirm()）
+    //   formatType: 'osaki' | 'mitsubishi' | 'jemic'
+    //   戻り値: Promise<boolean> （true=上書き / false=既存維持）
+    //   将来カスタムモーダル化を想定して Promise を返す
+    function _s5d_confirmOverwrite(formatType, oldValue, newValue) {
+      return new Promise(function (resolve) {
+        var label = (formatType === 'jemic') ? 'JEMIC μQR'
+                  : (formatType === 'mitsubishi') ? '銘板QR（三菱）'
+                  : (formatType === 'osaki') ? '銘板QR（大崎）'
+                  : 'QR';
+        var msg = '既に取得済の ' + label + ' があります。上書きしますか？\n\n'
+                + '旧: ' + String(oldValue || '').slice(0, 80) + '\n'
+                + '新: ' + String(newValue || '').slice(0, 80);
+        var ok = false;
+        try { ok = window.confirm(msg); } catch (e) { ok = false; }
+        try { console.log('[S5d] confirmOverwrite type=' + formatType + ' result=' + (ok ? 'overwrite' : 'keep')); } catch (e) {}
+        resolve(!!ok);
+      });
+    }
+
+    // 累積マージ → 共通後処理（_session_finalizeResult）呼出
+    //   args: { qr_raw, uqr_raw, raw_codes, b64, blob, filename, source }
+    //   戻り値: Promise<void>（confirm 経由で非同期）
+    //
+    //   累積方針:
+    //     - 既存 _sessionResult が無ければ初期化
+    //     - 既存 qr_raw 空 + 新 qr_raw あり → 採用
+    //     - 既存 qr_raw あり + 新 qr_raw あり (≠) → confirm() で上書き判断
+    //         承認 → 新値で上書き
+    //         拒否 → 既存値維持・qr_history には追記（記録は残す）
+    //     - 既存 qr_raw あり + 新 qr_raw あり (==) → confirm 不要・既存維持
+    //     - μQR も同様
+    //   銘板アップ画像（b64 / blob / filename）:
+    //     - 初回スキャン時のみ採用（scan_count == 0 のとき）
+    //     - 追加スキャン時は既存 _sessionImageB64 / _sessionLastBlob / _sessionLastFilename を保持
+    //   merge 後に _session_finalizeResult を呼んで preview / result HTML / IndexedDB / screen-after を更新
+    function _s5d_mergeNewScan(args) {
+      var a = args || {};
+      if (!_sessionResult) _s5d_initSessionResult();
+
+      var newQr  = String(a.qr_raw || '');
+      var newUqr = String(a.uqr_raw || '');
+      var prevQr  = String(_sessionResult.qr_raw || '');
+      var prevUqr = String(_sessionResult.uqr_raw || '');
+
+      // qr_raw の上書き判断
+      var qrPromise;
+      if (!newQr) {
+        // 新値なし → 既存維持
+        qrPromise = Promise.resolve(prevQr);
+      } else if (!prevQr) {
+        // 既存空 → 新値採用
+        qrPromise = Promise.resolve(newQr);
+      } else if (newQr === prevQr) {
+        // 同値 → confirm 不要・既存維持
+        qrPromise = Promise.resolve(prevQr);
+      } else {
+        // 衝突 → confirm
+        var cat = (typeof _s5c_classifyQrCategory === 'function')
+          ? _s5c_classifyQrCategory(newQr, '')
+          : { category: 'osaki_18' };
+        var formatType = (cat.category === 'mitsubishi_own') ? 'mitsubishi' : 'osaki';
+        qrPromise = _s5d_confirmOverwrite(formatType, prevQr, newQr).then(function (ok) {
+          return ok ? newQr : prevQr;
+        });
+      }
+
+      // uqr_raw の上書き判断
+      var uqrPromise;
+      if (!newUqr) {
+        uqrPromise = Promise.resolve(prevUqr);
+      } else if (!prevUqr) {
+        uqrPromise = Promise.resolve(newUqr);
+      } else if (newUqr === prevUqr) {
+        uqrPromise = Promise.resolve(prevUqr);
+      } else {
+        uqrPromise = _s5d_confirmOverwrite('jemic', prevUqr, newUqr).then(function (ok) {
+          return ok ? newUqr : prevUqr;
+        });
+      }
+
+      return Promise.all([qrPromise, uqrPromise]).then(function (resolved) {
+        var nextQr = resolved[0];
+        var nextUqr = resolved[1];
+
+        // 銘板アップ画像は初回のみ採用（scan_count==0）。追加スキャン時は保持
+        var isFirstScan = ((_sessionResult && _sessionResult.scan_count) || 0) === 0;
+        var passB64      = isFirstScan ? (a.b64 || '')      : (_sessionImageB64 || '');
+        var passBlob     = isFirstScan ? (a.blob || null)   : (_sessionLastBlob || null);
+        var passFilename = isFirstScan ? (a.filename || '') : (_sessionLastFilename || '');
+
+        // S5d 拡張フィールドを finalize 前に計算しておき、finalize 後に再付与する。
+        // finalize 内で _sessionResult が新オブジェクトに **再代入** されるため、
+        // ここで先に値を確定させ、後段で復元する。
+        var prevHistory = (_sessionResult && _sessionResult.qr_history) || [];
+        var nextScanCount = ((_sessionResult && _sessionResult.scan_count) || 0) + 1;
+        var newHistoryEntry = {
+          scan_idx: nextScanCount,
+          mode: a.source || '',
+          qr_raw: newQr,
+          uqr_raw: newUqr,
+          adopted_qr:  (nextQr  === newQr  && newQr  !== prevQr),
+          adopted_uqr: (nextUqr === newUqr && newUqr !== prevUqr)
+        };
+        var nextHistory = prevHistory.concat([newHistoryEntry]);
+        var nextLastScanMode = a.source || '';
+
+        _session_finalizeResult({
+          qr_raw: nextQr,
+          uqr_raw: nextUqr,
+          raw_codes: a.raw_codes || [],
+          b64: passB64,
+          blob: passBlob,
+          filename: passFilename,
+          source: a.source || '',
+          _s5d_skipIndexedDbPut: !isFirstScan
+        });
+
+        // finalize が _sessionResult を再代入したので、S5d 拡張フィールドを再付与
+        if (_sessionResult) {
+          _sessionResult.scan_count = nextScanCount;
+          _sessionResult.last_scan_mode = nextLastScanMode;
+          _sessionResult.qr_history = nextHistory;
+        }
+      });
+    }
+
+    // ============================================================
+    // S5c: ライブビューと撮影 / 選択の両入口の共通後処理
+    //   入力 args:
+    //     {
+    //       qr_raw: string,           // 業務QR（osaki_18 / mitsubishi_own）
+    //       uqr_raw: string,          // JEMIC μQR
+    //       raw_codes: array,         // ZXing 結果（debug 表示用）
+    //       b64: string,              // dataURL（プレビュー用）
+    //       blob: Blob | null,        // IndexedDB put + 「📥 保存」用
+    //       filename: string,         // _s5e_buildFilename 結果
+    //       source: 'live' | 'static' // ログ用
+    //     }
+    //   処理:
+    //     - _sessionResult / _sessionImageB64 / _sessionLastBlob / _sessionLastFilename を確定
+    //     - preview / result HTML を更新
+    //     - blob があれば IndexedDB へ put（旧 pending は事前に呼出側で delete 済前提）
+    //     - screen-after に遷移
+    // ============================================================
+    function _session_finalizeResult(args) {
+      var a = args || {};
+      var qr  = String(a.qr_raw || '');
+      var uqr = String(a.uqr_raw || '');
+      var codes = a.raw_codes || [];
+
+      _sessionResult = { qr_raw: qr, uqr_raw: uqr, raw_codes: codes };
+
+      if (a.b64) {
+        _sessionImageB64 = a.b64;
+        var prevScan = document.getElementById('session-preview-scan');
+        var prevAfter = document.getElementById('session-preview-after');
+        if (prevScan)  prevScan.src = a.b64;
+        if (prevAfter) prevAfter.src = a.b64;
+      }
+
+      // IndexedDB put（旧 pending の delete は呼出側責務・撮り直しと同時選択を考慮）
+      //   S5d: 追加スキャン時 (_s5d_skipIndexedDbPut === true) は put をスキップし
+      //   既存 _sessionLastBlob / _sessionLastFilename / _sessionPendingId を維持（銘板画像保持）
+      if (a.blob && !a._s5d_skipIndexedDbPut) {
+        var fname = a.filename || _s5e_buildFilename(_SESSION_ID);
+        _sessionLastBlob = a.blob;
+        _sessionLastFilename = fname;
+        _s5e_pendingAdd({
+          blob: a.blob,
+          filename: fname,
+          session_id: _SESSION_ID
+        }).then(function (id) {
+          _sessionPendingId = id;
+        }).catch(function (err) {
+          try { console.warn('[S5e] IndexedDB put failed (業務継続):', err); } catch (e) {}
+          _session_logSend('IndexedDB put 失敗（保存ボタンは無効化されません）: ' + (err && err.message || err));
+        });
+      }
+
+      var resEl = document.getElementById('session-scan-result');
+      if (qr || uqr) {
+        var html = '';
+        if (qr)  html += '<div class="ok">✅ 銘板QR: <code>' + escapeHtml(qr) + '</code></div>';
+        if (uqr) html += '<div class="ok">✅ μQR: <code>' + escapeHtml(uqr) + '</code></div>';
+        if (resEl) resEl.innerHTML = html;
+        var sendBtn = document.getElementById('btn-session-send');
+        if (sendBtn) sendBtn.disabled = false;
+      } else {
+        if (resEl) resEl.innerHTML = '<div class="ng">⚠ QRコードが検出できませんでした。撮り直してください。</div>';
+        var sendBtn2 = document.getElementById('btn-session-send');
+        if (sendBtn2) sendBtn2.disabled = true;
+      }
+
+      var rawEl = document.getElementById('session-raw-codes');
+      if (rawEl) {
+        rawEl.textContent = (codes && codes.length) ? JSON.stringify(codes, null, 2).slice(0, 2000) : '(codes empty)';
+      }
+
+      try { console.log('[S5c] finalize source=' + (a.source || 'unknown') + ' qr=' + qr.slice(0,20) + ' uqr=' + uqr.slice(0,12)); } catch (e) {}
+      _session_show('after');
+      // S5d: screen-after 表示に同期して追加スキャンボタンの残数 / 表示を更新
+      if (typeof _s5d_updateAddScanButton === 'function') _s5d_updateAddScanButton();
+    }
+
     function _session_onFilePicked(file) {
       _session_show('scanning');
-      _session_compressImage(file, 1600, 0.8).then(function (c) {
-        _sessionImageB64 = c.b64;
-        document.getElementById('session-preview-scan').src = c.b64;
-        document.getElementById('session-preview-after').src = c.b64;
+
+      // S5d: 初回 / 撮り直し後 と 追加スキャン を区別
+      //   isFirstScan = scan_count > 0 ではない（=未スキャン or retake 直後）
+      //   追加スキャン時は既存 pendingId / Blob / Filename / IndexedDB レコード / preview-scan を維持
+      var isFirstScan = !(_sessionResult && _sessionResult.scan_count > 0);
+      var deletePrev;
+      if (isFirstScan) {
+        // S5e: 同一フローで再選択 (撮り直し含む) された場合、古い pending は delete してから put
+        var prevPendingId = _sessionPendingId;
+        _sessionPendingId = null;
+        _sessionLastBlob = null;
+        _sessionLastFilename = '';
+        deletePrev = prevPendingId
+          ? _s5e_pendingDelete(prevPendingId).catch(function (err) {
+              try { console.warn('[S5e] IndexedDB delete failed:', err); } catch (e) {}
+            })
+          : Promise.resolve();
+      } else {
+        // 追加スキャン: 既存 pending / Blob / Filename / preview を保持
+        deletePrev = Promise.resolve();
+      }
+
+      var compressed = null;
+      deletePrev.then(function () {
+        return _session_compressImage(file, 1600, 0.8);
+      }).then(function (c) {
+        compressed = c;
+        // S5c: scanning 画面の preview を旧版同等に保つ。
+        // S5d: 追加スキャン時は銘板アップ画像保持のため preview-scan は更新しない
+        if (isFirstScan) {
+          var prevScan = document.getElementById('session-preview-scan');
+          if (prevScan) prevScan.src = c.b64;
+        }
         return _session_scanFromCanvas(c.canvas);
       }).then(function (codes) {
+        // S5d: _s5d_mergeNewScan 経由で累積マージ → finalize 呼出
         var cls = _session_classifyCodes(codes || []);
-        _sessionResult = { qr_raw: cls.qr_raw, uqr_raw: cls.uqr_raw, raw_codes: codes || [] };
-        var resEl = document.getElementById('session-scan-result');
-        if (cls.qr_raw || cls.uqr_raw) {
-          var html = '';
-          if (cls.qr_raw)  html += '<div class="ok">✅ 銘板QR: <code>' + escapeHtml(cls.qr_raw) + '</code></div>';
-          if (cls.uqr_raw) html += '<div class="ok">✅ μQR: <code>' + escapeHtml(cls.uqr_raw) + '</code></div>';
-          resEl.innerHTML = html;
-          document.getElementById('btn-session-send').disabled = false;
-        } else {
-          resEl.innerHTML = '<div class="ng">⚠ QRコードが検出できませんでした。撮り直してください。</div>';
-          document.getElementById('btn-session-send').disabled = true;
-        }
-        document.getElementById('session-raw-codes').textContent =
-          (codes && codes.length) ? JSON.stringify(codes, null, 2).slice(0, 2000) : '(codes empty)';
-        _session_show('after');
+        return _s5d_mergeNewScan({
+          qr_raw: cls.qr_raw,
+          uqr_raw: cls.uqr_raw,
+          raw_codes: codes || [],
+          b64: compressed.b64,
+          blob: compressed.blob || null,
+          filename: _s5e_buildFilename(_SESSION_ID),
+          source: 'static'
+        });
       }).catch(function (err) {
         _sessionResult = null;
         document.getElementById('session-scan-result').innerHTML =
@@ -1190,6 +1786,16 @@
       _sessionImageB64 = '';
       document.getElementById('btn-session-send').disabled = true;
       document.getElementById('f-img-session').value = '';
+      // S5e: 撮り直しは「現画像を破棄する意思」表明。古い pending を delete してクリア
+      var prev = _sessionPendingId;
+      _sessionPendingId = null;
+      _sessionLastBlob = null;
+      _sessionLastFilename = '';
+      if (prev) {
+        _s5e_pendingDelete(prev).catch(function (err) {
+          try { console.warn('[S5e] IndexedDB delete failed:', err); } catch (e) {}
+        });
+      }
       _session_show('pick');
     }
 
@@ -1222,6 +1828,17 @@
             'status: ' + (r.body.status || 'success') + ' / file_id: ' + (r.body.file_id || '(none)');
           _session_notifyParent();
           _session_show('sent');
+          // S5e: Drive 保存成功 (file_id 取得済) → IndexedDB から該当 pending を削除
+          //   _sessionPendingId が null（IndexedDB put 失敗時）の場合は no-op
+          var pid = _sessionPendingId;
+          if (pid) {
+            _sessionPendingId = null;
+            _sessionLastBlob = null;
+            _sessionLastFilename = '';
+            _s5e_pendingDelete(pid).catch(function (e) {
+              try { console.warn('[S5e] IndexedDB delete failed:', e); } catch (_) {}
+            });
+          }
           return;
         }
         if (r.phase === 'timeout') {
@@ -1240,6 +1857,8 @@
               document.getElementById('session-sent-status').textContent = 'status: qr_only (画像送信失敗)';
               _session_notifyParent();
               _session_show('sent');
+              // S5e: qr_only は **画像が Drive に届いていない** → IndexedDB は残存させる
+              //   復旧ダイアログ (Step 3-6) で再送信対象として救う設計
             } else {
               _session_showFailed(r2);
             }
@@ -1260,6 +1879,8 @@
 
     function _session_onCancelClick() {
       _sessionDone = true;
+      // S5c: ライブビュー中なら停止（カメラリソース解放）
+      if (typeof _s5c_stopLive === 'function') _s5c_stopLive();
       _session_sendCancel('user_cancel').finally(function () {
         try { window.close(); } catch (e) {}
         _session_show('sent');
@@ -1268,8 +1889,519 @@
     }
 
     function _session_onCloseClick() {
+      // S5c: 念のためライブビュー停止（通常は既に停止済）
+      if (typeof _s5c_stopLive === 'function') _s5c_stopLive();
       try { window.close(); } catch (e) {}
       document.body.innerHTML = '<p style="padding:20px;color:#64748b;">このタブは閉じて OK です。</p>';
+    }
+
+    // S5e: session モードの「📥 保存」ボタン handler
+    //   _sessionLastBlob は Step 3-4 で _session_onFilePicked から代入される。
+    var _sessionLastBlob = null;
+    var _sessionLastFilename = '';
+    function _session_onSaveLocalClick() {
+      if (!_sessionLastBlob) return;
+      _s5e_saveImage(_sessionLastBlob, _sessionLastFilename || ('meter_qr_' + Date.now() + '.jpg'));
+    }
+
+    // ============================================================
+    // Phase 1-b S5c: ライブビュー QR 認識（クルクルQR 同等の体験）
+    //   session モード専用。standalone は既存 startCamera/scanLoop を維持。
+    //   getUserMedia → リアルタイム認識ループ → 業務 QR 検出時に自動取得。
+    //   設計: docs/SESSION_LOG.md「S5c Step 2 設計ドラフト」参照。
+    //
+    //   Step 3-2 (本セクション): startLive / stopLive のみ実装。
+    //   Step 3-3 で _s5c_liveScanLoop を追加する際にこの var 群と関数群を
+    //   再利用する。
+    // ============================================================
+    var _s5cLiveStream = null;       // MediaStream
+    var _s5cLiveScanning = false;
+    var _s5cLiveScanTimer = null;    // setTimeout id
+    var _s5cLiveLastResult = '';     // 直近検出 join('|') 重複抑制
+    var _s5cLiveWarnTimer = null;    // 管理シール警告 3 秒抑制 setTimeout id
+
+    function _s5c_startLive() {
+      // SESSION_MODE 二重ガード（standalone から誤呼び出し防止）
+      if (!SESSION_MODE) return Promise.resolve();
+      if (_s5cLiveScanning || _s5cLiveStream) return Promise.resolve(); // 多重起動防止
+      var statusEl = document.getElementById('s5c-live-status');
+      var warnEl = document.getElementById('s5c-live-warn');
+      var frameEl = document.getElementById('s5c-overlay-frame');
+      if (statusEl) statusEl.textContent = 'カメラ起動中…';
+      if (warnEl) warnEl.classList.remove('show');
+      if (frameEl) frameEl.classList.remove('detect', 'warn');
+      _session_show('live');
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (statusEl) statusEl.textContent = 'このブラウザはカメラアクセスに対応していません';
+        return Promise.resolve();
+      }
+
+      return navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      }).then(function (stream) {
+        _s5cLiveStream = stream;
+        var video = document.getElementById('s5c-video');
+        if (!video) {
+          // DOM 異常: 即停止
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          _s5cLiveStream = null;
+          return;
+        }
+        video.srcObject = stream;
+        return video.play().then(function () {
+          _s5cLiveScanning = true;
+          _s5cLiveLastResult = '';
+          if (statusEl) statusEl.textContent = 'スキャン中…（QR をフレームに合わせてください）';
+          // Step 3-3: リアルタイム認識ループ開始（10FPS）
+          _s5c_liveScanLoop();
+        });
+      }).catch(function (err) {
+        // 権限拒否 / カメラ無し / その他例外
+        var msg = 'カメラへのアクセスを許可してください';
+        if (err && err.name === 'NotAllowedError') {
+          msg = 'カメラの権限が拒否されました。ブラウザ設定から許可してください';
+        } else if (err && err.name === 'NotFoundError') {
+          msg = 'カメラが見つかりません';
+        } else if (err && err.message) {
+          msg = 'カメラエラー: ' + err.message;
+        }
+        if (statusEl) statusEl.textContent = msg;
+        try { console.warn('[S5c] getUserMedia failed:', err); } catch (e) {}
+        // 失敗時はストリームなし・stopLive を呼んでも no-op で安全
+      });
+    }
+
+    // QR テキストの 7 カテゴリ分類（lab/verify/verify_qr.py:195 classify_qr の JS 移植）
+    //   入力: text, format（'QRCode' / 'MicroQRCode' 等）
+    //   出力: { category, isBusinessQr }
+    //     category: 'osaki_18' | 'jemic_uqr' | 'mitsubishi_own'
+    //              | 'control_url' | 'control_sticker' | 'control_numeric' | 'unknown'
+    //     isBusinessQr: osaki_18 / jemic_uqr / mitsubishi_own のいずれか true
+    function _s5c_classifyQrCategory(text, format) {
+      var t = String(text || '').trim();
+      if (!t) return { category: 'unknown', isBusinessQr: false };
+      // 1. osaki_18: 先頭 A + 英数字 17（合計 18 文字）
+      if (/^A[A-Z0-9]{17}$/i.test(t)) {
+        return { category: 'osaki_18', isBusinessQr: true };
+      }
+      // 2. jemic_uqr: 先頭 2 + 数字 6（MicroQR format も加味）
+      if (/^2\d{6}$/.test(t)) {
+        return { category: 'jemic_uqr', isBusinessQr: true };
+      }
+      // 3. mitsubishi_own: M を含み M2PM/M3PM/M1PM/ZZ2BC/ZZ1BC のいずれか
+      if (t.indexOf('M') >= 0 && /(M2PM|M3PM|M1PM|ZZ2BC|ZZ1BC)/.test(t)) {
+        return { category: 'mitsubishi_own', isBusinessQr: true };
+      }
+      // 4. control_url: http(s)://
+      if (/^https?:\/\//i.test(t)) {
+        return { category: 'control_url', isBusinessQr: false };
+      }
+      // 5. control_sticker: NNNN-NNN 形式（5256-1018 等）
+      if (/^\d{3,6}-\d{2,5}$/.test(t)) {
+        return { category: 'control_sticker', isBusinessQr: false };
+      }
+      // 6. control_numeric: 数字列 6-16 桁（jemic 7 桁は上で確定済なのでここは別物）
+      if (/^\d{6,16}$/.test(t)) {
+        return { category: 'control_numeric', isBusinessQr: false };
+      }
+      return { category: 'unknown', isBusinessQr: false };
+    }
+
+    // ライブビュー検出時の 3 分岐: business / control_* / unknown
+    //   business → frame Blob 化 → stopLive → _session_finalizeResult → screen-after
+    //   control_* → 警告バナー 3 秒・スキャン継続
+    //   unknown   → 視覚フィードバックなし（業務 QR 検出時に切替）
+    function _s5c_onLiveDetected(canvas, classified) {
+      var hasBusiness = classified.some(function (c) { return c.isBusinessQr; });
+      var hasControl  = classified.some(function (c) { return /^control_/.test(c.category); });
+      var frameEl = document.getElementById('s5c-overlay-frame');
+      var statusEl = document.getElementById('s5c-live-status');
+      var warnEl = document.getElementById('s5c-live-warn');
+
+      if (hasBusiness) {
+        // 警告中なら即解除（業務 QR が映ったら警告は出さない）
+        if (_s5cLiveWarnTimer) { clearTimeout(_s5cLiveWarnTimer); _s5cLiveWarnTimer = null; }
+        if (warnEl) warnEl.classList.remove('show');
+        if (frameEl) { frameEl.classList.remove('warn'); frameEl.classList.add('detect'); }
+
+        // 銘板QR / μQR を抽出（既存 _session_classifyCodes と同じ仕様）
+        var qrRaw = '', uqrRaw = '';
+        for (var i = 0; i < classified.length; i++) {
+          var c = classified[i];
+          if (c.category === 'jemic_uqr') {
+            if (!uqrRaw) uqrRaw = String(c.text || '');
+          } else if (c.isBusinessQr) {
+            if (!qrRaw) qrRaw = String(c.text || '');
+          }
+        }
+        if (statusEl) statusEl.textContent = '業務 QR を検出しました。送信画面に移動します…';
+
+        // S5d: フレームを Blob 化 → stopLive → _s5d_mergeNewScan 経由で累積マージ
+        var rawCodes = classified.map(function (c) { return { text: c.text, format: c.format }; });
+        if (canvas && canvas.toBlob) {
+          // dataURL も生成（プレビュー用）
+          var b64 = '';
+          try { b64 = canvas.toDataURL('image/jpeg', 0.85); } catch (e) { b64 = ''; }
+          canvas.toBlob(function (blob) {
+            _s5c_stopLive();
+            _s5d_mergeNewScan({
+              qr_raw: qrRaw,
+              uqr_raw: uqrRaw,
+              raw_codes: rawCodes,
+              b64: b64,
+              blob: blob || null,
+              filename: _s5e_buildFilename(_SESSION_ID),
+              source: 'live'
+            });
+          }, 'image/jpeg', 0.85);
+        } else {
+          // toBlob 未対応の場合は b64 のみで merge（IndexedDB 保存はスキップ）
+          _s5c_stopLive();
+          _s5d_mergeNewScan({
+            qr_raw: qrRaw,
+            uqr_raw: uqrRaw,
+            raw_codes: rawCodes,
+            b64: '',
+            blob: null,
+            filename: '',
+            source: 'live'
+          });
+        }
+        return;
+      }
+
+      if (hasControl) {
+        // 管理シール検出 → 警告 3 秒抑制（業務 QR 映入時は即解除）
+        if (frameEl) { frameEl.classList.remove('detect'); frameEl.classList.add('warn'); }
+        if (statusEl) statusEl.textContent = '⚠ 業務対象外の QR です（管理シール）';
+        if (warnEl) warnEl.classList.add('show');
+        if (_s5cLiveWarnTimer) clearTimeout(_s5cLiveWarnTimer);
+        _s5cLiveWarnTimer = setTimeout(function () {
+          if (warnEl) warnEl.classList.remove('show');
+          if (frameEl) frameEl.classList.remove('warn');
+          var s = document.getElementById('s5c-live-status');
+          if (s) s.textContent = 'スキャン中…（業務 QR を映してください）';
+          _s5cLiveWarnTimer = null;
+        }, 3000);
+        return;
+      }
+
+      // unknown → 視覚フィードバックなし
+      if (frameEl) frameEl.classList.remove('detect', 'warn');
+      if (statusEl) statusEl.textContent = 'スキャン中…（業務 QR を映してください）';
+    }
+
+    function _s5c_liveScanLoop() {
+      // SESSION_MODE 二重ガード + scanning フラグで停止保証
+      if (!SESSION_MODE) return;
+      if (!_s5cLiveScanning) return;
+      var video = document.getElementById('s5c-video');
+      var canvas = document.getElementById('s5c-canvas');
+      if (!video || !canvas) {
+        _s5cLiveScanTimer = setTimeout(_s5c_liveScanLoop, 100);
+        return;
+      }
+      // video の解像度が確定するまで次フレームへ送る
+      if (!video.videoWidth || !video.videoHeight) {
+        _s5cLiveScanTimer = setTimeout(_s5c_liveScanLoop, 100);
+        return;
+      }
+      // 中央正方形クロップ（既存 standalone scanLoop と同じ方針・object-fit cover の表示と整合）
+      var vw = video.videoWidth, vh = video.videoHeight;
+      var side = Math.min(vw, vh);
+      var sx = (vw - side) / 2, sy = (vh - side) / 2;
+      canvas.width = side; canvas.height = side;
+      var ctx = canvas.getContext('2d');
+      try {
+        ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+      } catch (e) {
+        // 描画失敗時もループ継続
+        _s5cLiveScanTimer = setTimeout(_s5c_liveScanLoop, 100);
+        return;
+      }
+      // ZXing 呼び出し（standalone scanLoop と同じオプション）
+      try {
+        var imageData = ctx.getImageData(0, 0, side, side);
+        ZXingWASM.getZXingModule().then(function () {
+          return ZXingWASM.readBarcodesFromImageData(imageData, {
+            formats: ['QRCode', 'MicroQRCode'],
+            tryHarder: true,
+            tryRotate: true,
+            tryInvert: true,
+            tryDownscale: true
+          });
+        }).then(function (results) {
+          if (!_s5cLiveScanning) return; // 停止指示後の遅延コールバックを無視
+          if (results && results.length > 0) {
+            var texts = results.map(function (r) { return String(r.text || ''); }).filter(Boolean);
+            var now = texts.join('|');
+            if (now && now !== _s5cLiveLastResult) {
+              _s5cLiveLastResult = now;
+              var classified = results.map(function (r) {
+                var c = _s5c_classifyQrCategory(r.text, r.format);
+                return { text: r.text, format: r.format, category: c.category, isBusinessQr: c.isBusinessQr };
+              });
+              try { console.log('[S5c] live detect:', classified); } catch (e) {}
+              _s5c_onLiveDetected(canvas, classified);
+            }
+          }
+        }).catch(function (err) {
+          // ZXing 内部例外もループ継続（一時的失敗）
+          try { console.warn('[S5c] zxing error:', err); } catch (e) {}
+        }).then(function () {
+          if (_s5cLiveScanning) {
+            _s5cLiveScanTimer = setTimeout(_s5c_liveScanLoop, 100);
+          }
+        });
+      } catch (e) {
+        try { console.warn('[S5c] scan loop error:', e); } catch (_) {}
+        if (_s5cLiveScanning) {
+          _s5cLiveScanTimer = setTimeout(_s5c_liveScanLoop, 100);
+        }
+      }
+    }
+
+    function _s5c_stopLive() {
+      // idempotent: 複数回呼ばれても安全
+      _s5cLiveScanning = false;
+      if (_s5cLiveScanTimer) {
+        clearTimeout(_s5cLiveScanTimer);
+        _s5cLiveScanTimer = null;
+      }
+      if (_s5cLiveWarnTimer) {
+        clearTimeout(_s5cLiveWarnTimer);
+        _s5cLiveWarnTimer = null;
+      }
+      if (_s5cLiveStream) {
+        try {
+          _s5cLiveStream.getTracks().forEach(function (t) { t.stop(); });
+        } catch (e) {
+          try { console.warn('[S5c] stream track stop failed:', e); } catch (_) {}
+        }
+        _s5cLiveStream = null;
+      }
+      var video = document.getElementById('s5c-video');
+      if (video) {
+        try { video.pause(); } catch (e) {}
+        video.srcObject = null;
+      }
+      _s5cLiveLastResult = '';
+      var warnEl = document.getElementById('s5c-live-warn');
+      if (warnEl) warnEl.classList.remove('show');
+      var frameEl = document.getElementById('s5c-overlay-frame');
+      if (frameEl) frameEl.classList.remove('detect', 'warn');
+    }
+
+    function _s5c_onStartLiveClick() {
+      // 撮影/選択 と同様に「現画像があれば破棄してからライブビュー」のフロー
+      // Step 3-4/3-5 で IndexedDB 連携を本実装する際に統合する設計。
+      // Step 3-2 ではカメラ起動のみ。
+      _s5c_startLive();
+    }
+
+    function _s5c_onLiveCancelClick() {
+      _s5c_stopLive();
+      _session_show('pick');
+    }
+
+    // ============================================================
+    // S5e Step 3-6/3-7: 復旧ダイアログ + 7 日 TTL 自動削除
+    //   起動時に IndexedDB の pending_images を確認し:
+    //     1. 7 日以上経過した pending を自動削除（容量肥大化防止）
+    //     2. 残った pending を 2 セクションに振り分け:
+    //        - 現セッション一致分 (_SESSION_ID と一致): [再送信] [破棄]
+    //        - 別セッション分: [📥 端末に保存] [破棄]
+    //     3. 0 件ならダイアログ表示しない
+    //   standalone モードからは呼ばれない（_session_bootstrap 内のみで起動）
+    // ============================================================
+    var _recoveryItems = { current: [], other: [] };
+
+    function _session_checkPendingImages() {
+      if (!SESSION_MODE) return Promise.resolve();
+      return _s5e_pendingCleanup().then(function (expiredIds) {
+        if (expiredIds && expiredIds.length) {
+          try { console.warn('[S5e] auto-deleted ' + expiredIds.length + ' pending image(s) (>7 days)'); } catch (e) {}
+        }
+        return _s5e_pendingList();
+      }).then(function (all) {
+        var current = (all || []).filter(function (p) { return p.session_id === _SESSION_ID; });
+        var other   = (all || []).filter(function (p) { return p.session_id !== _SESSION_ID; });
+        _recoveryItems.current = current;
+        _recoveryItems.other = other;
+        if (current.length === 0 && other.length === 0) return; // no-op
+        _session_renderRecoveryDialog();
+      }).catch(function (err) {
+        try { console.warn('[S5e] _session_checkPendingImages failed:', err); } catch (e) {}
+      });
+    }
+
+    function _s5e_formatTime(ms) {
+      try {
+        var d = new Date(ms);
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+               ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      } catch (e) { return '?'; }
+    }
+
+    function _session_renderRecoveryDialog() {
+      var dlg = document.getElementById('recovery-dialog');
+      if (!dlg) return;
+      var cur = _recoveryItems.current || [];
+      var oth = _recoveryItems.other || [];
+
+      var secCur = document.getElementById('recovery-section-current');
+      var secOth = document.getElementById('recovery-section-other');
+      if (cur.length > 0) {
+        secCur.style.display = '';
+        document.getElementById('recovery-current-count').textContent = String(cur.length);
+        var oldestC = Math.min.apply(Math, cur.map(function (p) { return p.saved_at; }));
+        document.getElementById('recovery-current-oldest').textContent = '最古: ' + _s5e_formatTime(oldestC);
+      } else {
+        secCur.style.display = 'none';
+      }
+      if (oth.length > 0) {
+        secOth.style.display = '';
+        document.getElementById('recovery-other-count').textContent = String(oth.length);
+        var oldestO = Math.min.apply(Math, oth.map(function (p) { return p.saved_at; }));
+        document.getElementById('recovery-other-oldest').textContent = '最古: ' + _s5e_formatTime(oldestO);
+      } else {
+        secOth.style.display = 'none';
+      }
+
+      if (cur.length === 0 && oth.length === 0) {
+        dlg.classList.remove('open');
+        return;
+      }
+      document.getElementById('recovery-status').textContent = '';
+      dlg.classList.add('open');
+    }
+
+    function _session_closeRecoveryDialog() {
+      var dlg = document.getElementById('recovery-dialog');
+      if (dlg) dlg.classList.remove('open');
+    }
+
+    function _session_recoveryStatus(msg) {
+      var el = document.getElementById('recovery-status');
+      if (el) el.textContent = msg || '';
+    }
+
+    function _s5e_blobToDataUrl(blob) {
+      return new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(String(fr.result || '')); };
+        fr.onerror = function () { reject(fr.error); };
+        fr.readAsDataURL(blob);
+      });
+    }
+
+    // 復旧ダイアログ「再送信」(現セッション分のみ)
+    //   各 pending を順次送信 → 成功なら delete・retry_count を increment しない（送信成功で完結）
+    //   失敗なら retry_count++ で IndexedDB を更新し残存
+    function _session_onRecoveryResend() {
+      var items = (_recoveryItems.current || []).slice();
+      if (items.length === 0) return;
+      _session_recoveryStatus('再送信中… 0 / ' + items.length);
+      var success = 0, failed = 0;
+      var i = 0;
+      function next() {
+        if (i >= items.length) {
+          _session_recoveryStatus('完了: 成功 ' + success + ' / 失敗 ' + failed);
+          // 状態を再ロードしてダイアログ更新
+          _session_checkPendingImages();
+          return;
+        }
+        var p = items[i++];
+        _s5e_blobToDataUrl(p.blob).then(function (dataUrl) {
+          var payload = {
+            session_id: p.session_id,
+            status: 'success',
+            qr_raw: '',     // 復旧時は QR 不明（画像のみの再送信）
+            uqr_raw: '',
+            image_b64: dataUrl,
+            image_ext: 'jpg',
+            client_ts: Date.now()
+          };
+          return _session_sendWithRetry(payload);
+        }).then(function (r) {
+          if (r && r.ok && r.body && r.body.ok) {
+            success++;
+            return _s5e_pendingDelete(p.id).catch(function (e) {
+              try { console.warn('[S5e] IndexedDB delete failed:', e); } catch (_) {}
+            });
+          }
+          failed++;
+          // retry_count++ して再保存
+          var updated = Object.assign({}, p, { retry_count: (p.retry_count || 0) + 1 });
+          return _s5e_pendingDelete(p.id).then(function () {
+            return _s5e_pendingAdd(updated);
+          }).catch(function (e) {
+            try { console.warn('[S5e] IndexedDB retry_count update failed:', e); } catch (_) {}
+          });
+        }).catch(function (e) {
+          failed++;
+          try { console.warn('[S5e] resend failed:', e); } catch (_) {}
+        }).then(function () {
+          _session_recoveryStatus('再送信中… ' + (success + failed) + ' / ' + items.length);
+          next();
+        });
+      }
+      next();
+    }
+
+    // 復旧ダイアログ「破棄」(現セッション分)
+    function _session_onRecoveryDiscardCurrent() {
+      var items = (_recoveryItems.current || []).slice();
+      if (items.length === 0) return;
+      if (!confirm('現セッション分 ' + items.length + ' 件を破棄します。よろしいですか？')) return;
+      Promise.all(items.map(function (p) {
+        return _s5e_pendingDelete(p.id).catch(function (e) {
+          try { console.warn('[S5e] IndexedDB delete failed:', e); } catch (_) {}
+        });
+      })).then(function () {
+        _session_checkPendingImages();
+      });
+    }
+
+    // 復旧ダイアログ「📥 端末に保存」(別セッション分のみ)
+    //   各 pending の Blob を順次 saveImage で共有・各保存ごとにユーザー確認は出さない
+    //   保存後に IndexedDB から削除はしない（ユーザーが破棄を別途選択するまで残す）
+    function _session_onRecoverySaveOther() {
+      var items = (_recoveryItems.other || []).slice();
+      if (items.length === 0) return;
+      _session_recoveryStatus('保存中… 0 / ' + items.length);
+      var done = 0;
+      var i = 0;
+      function next() {
+        if (i >= items.length) {
+          _session_recoveryStatus('保存完了: ' + done + ' / ' + items.length);
+          return;
+        }
+        var p = items[i++];
+        _s5e_saveImage(p.blob, p.filename || ('meter_qr_' + p.id + '.jpg')).then(function () {
+          done++;
+          _session_recoveryStatus('保存中… ' + done + ' / ' + items.length);
+        }).catch(function (e) {
+          try { console.warn('[S5e] saveImage failed:', e); } catch (_) {}
+        }).then(next);
+      }
+      next();
+    }
+
+    // 復旧ダイアログ「破棄」(別セッション分)
+    function _session_onRecoveryDiscardOther() {
+      var items = (_recoveryItems.other || []).slice();
+      if (items.length === 0) return;
+      if (!confirm('別セッション分 ' + items.length + ' 件を破棄します。よろしいですか？')) return;
+      Promise.all(items.map(function (p) {
+        return _s5e_pendingDelete(p.id).catch(function (e) {
+          try { console.warn('[S5e] IndexedDB delete failed:', e); } catch (_) {}
+        });
+      })).then(function () {
+        _session_checkPendingImages();
+      });
     }
 
     function _session_bindHandlers() {
@@ -1290,9 +2422,27 @@
       document.getElementById('btn-session-close-invalid').addEventListener('click', _session_onCloseClick);
       document.getElementById('btn-session-close-expired').addEventListener('click', _session_onCloseClick);
       document.getElementById('btn-session-close-failed').addEventListener('click', _session_onCloseClick);
+      // S5e: 「📥 保存」ボタン
+      document.getElementById('btn-session-save-local').addEventListener('click', _session_onSaveLocalClick);
+
+      // S5e: 復旧ダイアログのボタン群
+      document.getElementById('btn-recovery-resend').addEventListener('click', _session_onRecoveryResend);
+      document.getElementById('btn-recovery-discard-current').addEventListener('click', _session_onRecoveryDiscardCurrent);
+      document.getElementById('btn-recovery-save-other').addEventListener('click', _session_onRecoverySaveOther);
+      document.getElementById('btn-recovery-discard-other').addEventListener('click', _session_onRecoveryDiscardOther);
+      document.getElementById('btn-recovery-later').addEventListener('click', _session_closeRecoveryDialog);
+
+      // S5c: ライブビュー開始/中止ボタン
+      document.getElementById('btn-s5c-start-live').addEventListener('click', _s5c_onStartLiveClick);
+      document.getElementById('btn-s5c-live-cancel').addEventListener('click', _s5c_onLiveCancelClick);
+
+      // S5d: 追加 QR スキャンボタン
+      document.getElementById('btn-s5d-add-scan').addEventListener('click', _s5d_onAddScanClick);
 
       // pagehide: bfcache 対応の unload イベント。sendBeacon で cancelled を投げる
       window.addEventListener('pagehide', function () {
+        // S5c: ライブビュー中ならカメラリソース解放
+        if (typeof _s5c_stopLive === 'function') _s5c_stopLive();
         if (_sessionDone) return;
         if (!_SESSION_CB_RE.test(_SESSION_CB)) return;
         var payload = { session_id: _SESSION_ID, status: 'cancelled', client_ts: Date.now(), reason: 'pagehide' };
@@ -1316,6 +2466,8 @@
       }
       _session_startExpTimer();
       _session_show('pick');
+      // S5e: パラメータ検証通過後に未送信画像をチェック（standalone は通らない経路）
+      _session_checkPendingImages();
     }
   </script>
 </body>
